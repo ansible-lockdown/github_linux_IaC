@@ -1,0 +1,68 @@
+.env
+*.log
+*.retry
+.vagrant
+tests/*redhat-subscription
+tests/Dockerfile
+*.iso
+*.box
+packer_cache
+delete*
+ignore*
+.cache
+# VSCode
+.vscode
+.github/*
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+.output-mpg
+
+# DS_Store
+.DS_Store
+._*
+
+# Linux Editors
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+.elc
+auto-save-list
+tramp
+.\#*
+*.swp
+*.swo
+rh-creds.env
+travis.env
+
+# Lockdown-specific
+benchparse/
+*xccdf.xml
+*.retry
+test_inv
+
+# refactr workflow gitignore
+.github/workflow/
+
+# GitHub Issue and PR Templates
+.github/ISSUE_TEMPLATE
+.github/pull_request_template.md
+
+# terraform
+.terraform/
+.terraform.local.hcl
+.terraform*
+terraform.tfstate*
+hosts.yml
+
+*_key
+*.pub
+
+# Ignore dynamic inventory
+AWS_config/inventory.yml
+
+# ignore roles for repo
+playbooks/roles/awx_*/
+playbooks/roles/ansible_*/
