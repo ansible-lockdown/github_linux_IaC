@@ -23,7 +23,8 @@ This is called by the repository workflow to pull in this content.
 This enables us to manage the workflow and IAC centrally, enabling us to quickly change anything for improvements of issues with a certain region.
 
 ```mermaid
-A[Benchmark Pipeline] -->|Starts the github workflow|B[Loads linux_benchmark_testing]
+   graph TD;
+    A[Benchmark Pipeline] -->|Starts the github workflow|B[Loads  the linux_benchmark_testing]
     B --> C[Imports variables set in repo]
     C --> D[STEP - Welcome Message]
     D --> E[Sends welcome if first PR and invite to discord]
