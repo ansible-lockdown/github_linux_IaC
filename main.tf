@@ -45,14 +45,15 @@ resource "aws_instance" "testing_vm" {
   key_name                    = var.ami_key_pair_name # This is the key as known in the ec2 key_pairs
   instance_type               = var.instance_type
   tags = {
-    Environment  = "${var.environment}"
-    Name         = "${var.benchmark_os}-${var.benchmark_type}"
-    repository   = "${var.repository}"
+    Environment = "${var.environment}"
+    Name        = "${var.benchmark_os}-${var.benchmark_type}"
+    repository  = "${var.repository}"
   }
   vpc_security_group_ids = [aws_security_group.github_actions.id]
   subnet_id              = aws_subnet.Main.id
   metadata_options {
-    http_tokens = "required"
+    http_tokens   = "required"
+    http_endpoint = "enabled"
   }
   root_block_device {
     delete_on_termination = true
