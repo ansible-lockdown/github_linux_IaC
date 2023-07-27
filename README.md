@@ -41,3 +41,15 @@ This enables us to manage the workflow and IAC centrally, enabling us to quickly
     O -->|sleep 60 seconds|P[If Debug variable set output ansible hosts]
     P --> Q[Runs ansible playbook] --> |terraform destroy|R[Destroys all the IaC config]
 ```
+
+# Run locally
+
+```shell
+$ export benchmark_type="CIS"
+$ export OSVAR="RHEL8"
+$ export TF_VAR_repository="${OSVAR}-${benchmark_type}"
+$ export TF_VAR_benchmark_type="${benchmark_type}"
+
+$ terraform apply -var-file "github_vars.tfvars" -var-file "${OSVAR}.tfvars"
+$ terraform destroy -var-file "github_vars.tfvars" -var-file "${OSVAR}.tfvars"
+```
