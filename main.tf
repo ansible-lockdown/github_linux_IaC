@@ -80,8 +80,13 @@ resource "local_file" "inventory" {
         rhel_07_010340: false
         rhel7stig_bootloader_password_hash: 'grub.pbkdf2.sha512.somethingnewhere'
         rhel9cis_rule_5_6_6: false  # skip root passwd check and keys only
-        ubtu20cis_grub_pw: 'grub.pbkdf2.sha512.10000.D268F2334B417C788C859A1104D489BE73205AFB74539DCAB0AC3F4A3B2ADE34D994D6D86A6F665200608F88050BCBC5D161ED07DE78C39D3C2BAE345F22DCEE.730C7E0F06BBDD2A54FF7BE93B710E94E1B1B61FE8E0BF27313E2429AF2C57348BF2EA647E39EF5AB13BE3EF3B1972FA5082EEB62AB9436314EA851D8042F423'
+        ## Passwds for ubuntu
+        grub_user_pass: 'grub.pbkdf2.sha512.10000.D268F2334B417C788C859A1104D489BE73205AFB74539DCAB0AC3F4A3B2ADE34D994D6D86A6F665200608F88050BCBC5D161ED07DE78C39D3C2BAE345F22DCEE.730C7E0F06BBDD2A54FF7BE93B710E94E1B1B61FE8E0BF27313E2429AF2C57348BF2EA647E39EF5AB13BE3EF3B1972FA5082EEB62AB9436314EA851D8042F423'
+        ubtu20cis_grub_pw: "{{ grub_user_pass }}"
         ubtu20cis_root_pw: '$6$m1u7QuCBzmdHhig3$Ss48R6udPO.sISy8XphR2jlLhGqQiLoKkjdqVVU7zsU108oOq25.Bj0BTeafnljaur7iMnQPYXpRCzgXc6o4U1'
+        ubtu22cis_bootloader_password_hash: "{{ grub_user_pass }}"
+        ubtu22cis_set_grub_user_pass: true
+        ubtu22cis_grub_user_passwd: '$y$j9T$MBA5l/tQyWifM869nQjsi.$cTy0ConcNjIYOn6Cppo5NAky20osrkRxz4fEWA8xac6'
     EOF
 }
 
