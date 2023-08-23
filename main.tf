@@ -77,6 +77,9 @@ resource "local_file" "inventory" {
         run_audit: true
         system_is_ec2: true
         skip_reboot: false
+        amzn2023cis_rule_1_2_2: false  # Breaks patching
+        amzn2023cis_rule_1_2_4: false  # Breaks patching
+        amzn2023cis_rule_4_6_6: false  # default image has no root password and nopasswd not removed from sudo
         rhel_07_010340: false
         rhel7stig_bootloader_password_hash: 'grub.pbkdf2.sha512.somethingnewhere'
         rhel9cis_rule_5_6_6: false  # skip root passwd check and keys only
