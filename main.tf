@@ -92,4 +92,3 @@ resource "local_file" "inventory" {
         ubtu22cis_grub_user_passwd: '$y$j9T$MBA5l/tQyWifM869nQjsi.$cTy0ConcNjIYOn6Cppo5NAky20osrkRxz4fEWA8xac6'
     EOF
 }
-

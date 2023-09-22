@@ -4,4 +4,3 @@ ami_os        = "centos7"
 ami_username  = "centos"
 ami_user_home = "/home/centos"
 benchmark_os  = "RHEL7"
-
