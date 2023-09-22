@@ -1,4 +1,4 @@
-#Ami ubuntu 2204 
+#Ami ubuntu 2204
 ami_id        = "ami-051dcca84f1edfff1"
 ami_os        = "ubuntu22"
 ami_username  = "ubuntu"

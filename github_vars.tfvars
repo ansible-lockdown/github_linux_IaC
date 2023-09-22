@@ -1,7 +1,7 @@
 // github_actions variables
 // Resourced in github_networks.tf
 // Declared in variables.tf
-// 
+//
 
 namespace = "Lockdown_enterprise_workflow"
 
