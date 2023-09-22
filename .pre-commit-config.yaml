@@ -3,7 +3,7 @@
 ##### Inherited
 ci:
     autofix_prs: false
-    skip: [detect-aws-credentials, ansible-lint ]
+    skip: [detect-aws-credentials, ansible-lint]
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
