@@ -97,6 +97,7 @@ resource "local_file" "inventory" {
         ## Passwds for ubuntu
         ubtu20cis_bootloader_password_hash: "{{ grub_user_pass }}"
         ubtu20cis_root_pw: "{{ root_passwd }}"
+        ubtu22cis_rule_5_3_4: false  # Excluded as default AWS build has no password for user
         ubtu22cis_bootloader_password_hash: "{{ grub_user_pass }}"
         ubtu22cis_set_grub_user_pass: true
         ubtu22cis_grub_user_passwd: "{{ grub_user_passwd }}"
