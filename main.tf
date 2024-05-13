@@ -8,10 +8,10 @@ provider "aws" {
 resource "aws_instance" "testing_vm" {
   ami                         = var.ami_id
   availability_zone           = var.availability_zone
-  key_name                    = var.ami_key_pair_name # This is the key as known in the ec2 key_pairs
+  key_name                    = var.ami_key_pair_name  # This is the key as known in the ec2 key_pairs
   instance_type               = var.instance_type
-  subnet_id                   = "subnet-0809eb7b1a039967e"
-  vpc_security_group_ids      = ["sg-0d82d9de71327bdb8"]
+  subnet_id                   = "subnet-03ee2c5bbc174ce8f"
+  vpc_security_group_ids      = ["sg-06e2d8c9ec31196e4"]
   tags = {
     Environment = "${var.environment}"
     Name        = "${var.benchmark_os}-${var.benchmark_type}"
