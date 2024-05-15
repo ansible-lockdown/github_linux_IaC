@@ -10,12 +10,14 @@ resource "aws_instance" "testing_vm" {
   availability_zone           = var.availability_zone
   key_name                    = var.ami_key_pair_name  # This is the key as known in the ec2 key_pairs
   instance_type               = var.instance_type
-  subnet_id                   = "subnet-03ee2c5bbc174ce8f"
-  vpc_security_group_ids      = ["sg-06e2d8c9ec31196e4"]
+  subnet_id                   = var.privsubnet_id
+  vpc_security_group_ids      = ["${var.vpc_id}"]
   tags = {
-    Environment = "${var.environment}"
-    Name        = "${var.benchmark_os}-${var.benchmark_type}"
-  }
+      Used_by    = "${var.used_by}"
+      Name       = "${var.name_prefix}_${var.benchmark_os}_${var.benchmark_type}"
+      Department = "${var.department}"
+      Created_by = "${var.created_by}"
+    }
   metadata_options {
     http_tokens   = "required"
     http_endpoint = "enabled"
@@ -23,8 +25,10 @@ resource "aws_instance" "testing_vm" {
   root_block_device {
     delete_on_termination = true
     tags = {
-      Environment = "${var.environment}"
-      Name        = "${var.benchmark_os}-${var.benchmark_type}-rootvol"
+      Used_by    = "${var.used_by}"
+      Name       = "${var.name_prefix}_${var.benchmark_os}_${var.benchmark_type}_rootvol"
+      Department = "${var.department}"
+      Created_by = "${var.created_by}"
     }
   }
 }

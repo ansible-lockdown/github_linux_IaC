@@ -44,16 +44,29 @@ variable "ami_user_home" {
   type        = string
 }
 
-variable "namespace" {
-  description = "Name used across all tags"
-  default     = "Lockdown_enterprise_workflow"
+
+variable "name_prefix" {
+  description = "prefix used for naming e.g. var.name_prefix_VPC"
   type        = string
+  default     = "Ansible_GH_workflow"
 }
 
-variable "environment" {
-  description = "Env Name used across all tags"
+variable "used_by" {
+  description = "Where/what this is used by"
   type        = string
-  default     = "Ansible_Lockdown_Environment"
+  default     = "Ansible_Lockdown_Runner"
+}
+
+variable "created_by" {
+  description = "Whats creates this config e.g. IaC_manual or IaC_gh_action"
+  type        = string
+  default     = "IaC_GitHub_Workflow"
+}
+
+variable "department" {
+  description = "Who uses/maintains this?"
+  type        = string
+  default     = "ORG700"
 }
 
 variable "benchmark_os" {
@@ -64,4 +77,16 @@ variable "benchmark_os" {
 variable "benchmark_type" {
   description = "The benchmark OS thats being tested"
   type        = string
+}
+
+variable "vpc_id" {
+  description = "The id of the vpc for the runner"
+  type        = string
+  sensitive   = true
+}
+
+variable "privsubnet_id" {
+  description = "The id of the private subnet for the runner vpc"
+  type        = string
+  sensitive   = true
 }
