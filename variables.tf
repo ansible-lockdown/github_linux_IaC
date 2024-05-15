@@ -79,8 +79,8 @@ variable "benchmark_type" {
   type        = string
 }
 
-variable "vpc_id" {
-  description = "The id of the vpc for the runner"
+variable "vpc_secgrp_id" {
+  description = "The id of the vpc security group for the runner"
   type        = string
   sensitive   = true
 }

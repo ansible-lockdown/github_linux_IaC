@@ -11,7 +11,7 @@ resource "aws_instance" "testing_vm" {
   key_name                    = var.ami_key_pair_name  # This is the key as known in the ec2 key_pairs
   instance_type               = var.instance_type
   subnet_id                   = var.privsubnet_id
-  vpc_security_group_ids      = ["${var.vpc_id}"]
+  vpc_security_group_ids      = ["${var.vpc_secgrp_id}"]
   tags = {
       Used_by    = "${var.used_by}"
       Name       = "${var.name_prefix}_${var.benchmark_os}_${var.benchmark_type}"
