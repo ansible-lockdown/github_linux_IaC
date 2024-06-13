@@ -54,6 +54,7 @@ resource "local_file" "inventory" {
         amzn2023cis_rule_1_2_2: false  # Breaks patching
         amzn2023cis_rule_1_2_4: false  # Breaks patching
         amzn2023cis_rule_4_6_6: false  # default image has no root password and nopasswd not removed from sudo
+        rhel7cis_rule_4_5_2_4: false  # Dont set root password
         rhel_07_010340: false
         rhel7stig_bootloader_password_hash: 'grub.pbkdf2.sha512.somethingnewhere'  # pragma: allowlist secret
         rhel9cis_rule_5_6_6: false  # skip root passwd check and keys only
