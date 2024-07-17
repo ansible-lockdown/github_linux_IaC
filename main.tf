@@ -51,6 +51,7 @@ resource "local_file" "inventory" {
         system_is_ec2: true
         skip_reboot: false
         amazon2cis_rule_4_5_2_4: false  # Don't set root password
+        amzn2023cis_rule_1_2_1: false  # Breaks patching
         amzn2023cis_rule_1_2_2: false  # Breaks patching
         amzn2023cis_rule_1_2_4: false  # Breaks patching
         amzn2023cis_rule_4_6_6: false  # default image has no root password and nopasswd not removed from sudo
