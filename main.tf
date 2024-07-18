@@ -57,8 +57,10 @@ resource "local_file" "inventory" {
         amzn2023cis_rule_4_6_6: false  # default image has no root password and nopasswd not removed from sudo
         rhel7cis_rule_4_5_2_4: false  # Dont set root password
         rhel7cis_rule_4_3_4: false  # set sudoers password required
+        rhel7cis_add_updated_repo: true # allow repo to be updated for patching
         rhel_07_010340: false
         rhel7stig_bootloader_password_hash: 'grub.pbkdf2.sha512.somethingnewhere'  # pragma: allowlist secret
+        rhel7stig_add_updated_repo: true # allow repo to be updated for patching
         rhel8stig_sudoers_exclude_nopasswd_list:
         - ec2-user
         - rocky
