@@ -61,10 +61,15 @@ resource "local_file" "inventory" {
         rhel_07_010340: false
         rhel7stig_bootloader_password_hash: 'grub.pbkdf2.sha512.somethingnewhere'  # pragma: allowlist secret
         rhel7stig_add_updated_repo: true # allow repo to be updated for patching
-        rhel8stig_sudoers_exclude_nopasswd_list:
+        sudoers_exclude_nopasswd_list:
         - ec2-user
         - rocky
+        - vagrant
+        rhel8stig_sudoers_exclude_nopasswd_list: "{{ sudoers_exclude_nopasswd_list }}"
+        rhel9cis_sudoers_exclude_nopasswd_list: "{{ sudoers_exclude_nopasswd_list }}"
         rhel9cis_rule_5_6_6: false  # skip root passwd check and keys only
+        rhel9cis_rule_5_2_4: false # skip user password
+        rhel9cis_rule_5_4_2_4: false # v2 skip root password
         rhel9cis_bootloader_password_hash: grub.pbkdf2.sha512.10000.9306A36764A7BEA3BF492D1784396B27F52A71812E9955A58709F94EE70697F9BD5366F36E07DEC41B52279A056E2862A93E42069D7BBB08F5DFC2679CD43812.6C32ADA5449303AD5E67A4C150558592A05381331DE6B33463469A236871FA8E70738C6F9066091D877EF88A213C86825E093117F30E9E1BF158D0DB75E7581B
         rhel9stig_audit_log_filesystem: '/'
         rhel_09_411015: false # Dont expire user password breaks pipeline
