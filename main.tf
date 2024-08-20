@@ -88,7 +88,8 @@ resource "local_file" "inventory" {
         debian11cis_allow_common_auth_rewrite: true
         deb12cis_disruption_high: true
         deb12cis_bootloader_password_hash: "{{ grub_user_pass }}"
-        deb12cis_rule_5_2_4: false
+        deb12cis_rule_5_2_4: false  # User password set (breaks sudo)
+        deb12cis_rule_5_4_2_4: false  # Root password is set
         ## Passwds for ubuntu
         ubtu20cis_bootloader_password_hash: "{{ grub_user_pass }}"
         ubtu20cis_root_pw: "{{ root_passwd }}"
