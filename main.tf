@@ -86,6 +86,8 @@ resource "local_file" "inventory" {
         debian11cis_root_pw: "{{ root_passwd }}"
         debian11cis_purge_apt: true
         debian11cis_allow_common_auth_rewrite: true
+        deb12cis_disruption_high: true
+        deb12cis_bootloader_password_hash: "{{ grub_user_pass }}"
         ## Passwds for ubuntu
         ubtu20cis_bootloader_password_hash: "{{ grub_user_pass }}"
         ubtu20cis_root_pw: "{{ root_passwd }}"
