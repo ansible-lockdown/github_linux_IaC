@@ -65,6 +65,7 @@ resource "local_file" "inventory" {
         - ec2-user
         - rocky
         - vagrant
+        rhel8cis_authselect_custom_profile_name: mpg_test
         rhel8cis_bootloader_password_hash: "grub.pbkdf2.sha512.blah"
         rhel8cis_set_boot_pass: true
         rhel8cis_disruption_high: true
