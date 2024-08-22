@@ -65,6 +65,10 @@ resource "local_file" "inventory" {
         - ec2-user
         - rocky
         - vagrant
+        rhel8cis_bootloader_password_hash: "grub.pbkdf2.sha512.blah"
+        rhel8cis_set_boot_pass: true
+        rhel8cis_disruption_high: true
+        rhel8cis_allow_authselect_updates: true
         rhel8stig_sudoers_exclude_nopasswd_list: "{{ sudoers_exclude_nopasswd_list }}"
         rhel9cis_sudoers_exclude_nopasswd_list: "{{ sudoers_exclude_nopasswd_list }}"
         rhel9cis_rule_5_6_6: false  # skip root passwd check and keys only
