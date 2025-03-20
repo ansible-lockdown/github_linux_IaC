@@ -48,6 +48,7 @@ resource "local_file" "inventory" {
       vars:
         setup_audit: true
         run_audit: true
+        fetch_audit_output: true
         system_is_ec2: true
         skip_reboot: false
         amazon2cis_rule_4_5_2_4: false  # Don't set root password
