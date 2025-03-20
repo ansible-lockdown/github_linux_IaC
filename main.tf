@@ -31,7 +31,11 @@ resource "aws_instance" "testing_vm" {
       Created_by = "${var.created_by}"
     }
   }
+  provisioner "remote-exec" {
+  inline = ["sudo hostnamectl set-hostname ${var.benchmark_os}-${var.benchmark_type}"]
+  }
 }
+
 
 // generate inventory file
 resource "local_file" "inventory" {
