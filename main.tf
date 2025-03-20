@@ -29,10 +29,17 @@ resource "aws_instance" "testing_vm" {
       Name       = "${var.name_prefix}_${var.benchmark_os}_${var.benchmark_type}_rootvol"
       Department = "${var.department}"
       Created_by = "${var.created_by}"
-    }
+      }
   }
+  connection {
+    type = "ssh"
+    user = "ec2-user"
+    private_key = file("~/.ssh/LE_workflow_key")
+    host = self.public_ip
+
+    }
   provisioner "remote-exec" {
-  inline = ["sudo hostnamectl set-hostname ${var.benchmark_os}-${var.benchmark_type}"]
+    inline = ["sudo hostnamectl set-hostname ${var.benchmark_os}-${var.benchmark_type}"]
   }
 }
 
