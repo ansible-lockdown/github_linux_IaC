@@ -36,7 +36,7 @@ resource "aws_instance" "testing_vm" {
       type = "ssh"
       user = "ec2-user"
       private_key = file("~/.ssh/LE_workflow_key")
-      host = ${aws_instance.testing_vm.private_ip}
+      host = "${aws_instance.testing_vm.private_ip}"
     }
   inline = [ "sudo hostnamectl set-hostname ${var.benchmark_os}-${var.benchmark_type}" ]
   }
