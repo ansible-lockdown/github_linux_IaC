@@ -31,9 +31,9 @@ resource "aws_instance" "testing_vm" {
       Created_by = "${var.created_by}"
       }
   }
-  # provisioner "local-exec" {
-  #   command = "aws ec2 wait instance-status-ok --instance-ids ${self.id}"
-  # }
+  provisioner "local-exec" {
+    command = "aws ec2 wait instance-status-ok --instance-ids ${self.id}"
+  }
 }
 
 // generate inventory file
@@ -122,7 +122,4 @@ resource "local_file" "inventory" {
       ANSIBLE_HOST_KEY_CHECKING = "false"
     }
   }
-  depends_on = [
-    aws_instance.testing_vm
-  ]
 }
