@@ -29,10 +29,7 @@ resource "aws_instance" "testing_vm" {
       Name       = "${var.name_prefix}_${var.benchmark_os}_${var.benchmark_type}_rootvol"
       Department = "${var.department}"
       Created_by = "${var.created_by}"
-      }
-  }
-  provisioner "local-exec" {
-    command = "aws ec2 wait instance-status-ok --instance-ids ${self.id}"
+    }
   }
 }
 
@@ -45,13 +42,12 @@ resource "local_file" "inventory" {
     # benchmark host
     all:
       hosts:
-        ${var.benchmark_os}-${var.benchmark_type}:
+        ${var.ami_os}:
           ansible_host: ${aws_instance.testing_vm.private_ip}
           ansible_user: ${var.ami_username}
       vars:
         setup_audit: true
         run_audit: true
-        fetch_audit_output: true
         system_is_ec2: true
         skip_reboot: false
         amazon2cis_rule_4_5_2_4: false  # Don't set root password
@@ -115,10 +111,4 @@ resource "local_file" "inventory" {
         ubtu24cis_set_grub_user_pass: true
         ubtu24cis_grub_user_passwd: "{{ grub_user_passwd }}"
     EOF
-  provisioner "local-exec" {
-    command = "/opt/ansible_2.16.6_venv/bin/ansible all -i hosts.yml -m hostname -a \"name={{ inventory_hostname }}\" -b"
-    environment = {
-      ANSIBLE_HOST_KEY_CHECKING = "false"
-    }
-  }
 }
