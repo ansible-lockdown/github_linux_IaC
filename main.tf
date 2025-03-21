@@ -1,5 +1,5 @@
 provider "aws" {
-  profile = "workflow"
+  profile = ""
   region  = var.aws_region
 }
 
