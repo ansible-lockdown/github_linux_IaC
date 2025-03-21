@@ -1,5 +1,5 @@
 provider "aws" {
-  profile = ""
+  profile = "workflow"
   region  = var.aws_region
 }
 
@@ -31,14 +31,8 @@ resource "aws_instance" "testing_vm" {
       Created_by = "${var.created_by}"
       }
   }
-  provisioner "remote-exec" {
-    connection {
-      type = "ssh"
-      user = "ec2-user"
-      private_key = file("~/.ssh/LE_workflow_key")
-      host = "${aws_instance.testing_vm.private_ip}"
-    }
-  inline = [ "sudo hostnamectl set-hostname ${var.benchmark_os}-${var.benchmark_type}" ]
+  provisioner "local-exec" {
+    command = "aws ec2 wait instance-status-ok --instance-ids ${self.id}"
   }
 }
 
@@ -51,9 +45,10 @@ resource "local_file" "inventory" {
     # benchmark host
     all:
       hosts:
-        ${var.ami_os}:
+        ${var.benchmark_os}-${var.benchmark_type}:
           ansible_host: ${aws_instance.testing_vm.private_ip}
           ansible_user: ${var.ami_username}
+          ansible_ssh_private_key_file: "~/.ssh/le_runner"
       vars:
         setup_audit: true
         run_audit: true
@@ -121,4 +116,13 @@ resource "local_file" "inventory" {
         ubtu24cis_set_grub_user_pass: true
         ubtu24cis_grub_user_passwd: "{{ grub_user_passwd }}"
     EOF
+  provisioner "local-exec" {
+    command = "/opt/ansible_2.16.6_venv/bin/ansible all -i hosts.yml -m hostname \"name={{ inventory_hostname }}\""
+    environment = {
+      ANSIBLE_HOST_KEY_CHECKING = "false"
+    }
+  }
+  depends_on = [
+    aws_instance.testing_vm
+  ]
 }
