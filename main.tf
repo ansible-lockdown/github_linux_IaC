@@ -117,7 +117,7 @@ resource "local_file" "inventory" {
         ubtu24cis_grub_user_passwd: "{{ grub_user_passwd }}"
     EOF
   provisioner "local-exec" {
-    command = "/opt/ansible_2.16.6_venv/bin/ansible all -i hosts.yml -m hostname -a \"name={{ inventory_hostname }}\""
+    command = "/opt/ansible_2.16.6_venv/bin/ansible all -i hosts.yml -m hostname -a \"name={{ inventory_hostname }}\" -b"
     environment = {
       ANSIBLE_HOST_KEY_CHECKING = "false"
     }
