@@ -113,6 +113,7 @@ resource "local_file" "inventory" {
         ubtu24cis_rule_5_4_2_4: false  # root password set
         ubtu24cis_set_grub_user_pass: true
         ubtu24cis_grub_user_passwd: "{{ grub_user_passwd }}"
+        ubtu24gitstig_audit_log_filesystem: '/'
     EOF
   provisioner "local-exec" {
     command = "/opt/ansible_2.16.6_venv/bin/ansible-playbook -i hosts.yml /opt/local_playbooks/change_hostname.yml"
