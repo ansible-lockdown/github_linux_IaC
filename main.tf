@@ -95,6 +95,7 @@ resource "local_file" "inventory" {
         rhel10cis_authselect_custom_profile_name: mpg-cis
         ### Debian variables
         deb11cis_rule_5_2_4: false  # Skips connecting use sudo check
+        deb11cis_rule_5_4_2_4: false  #Skips root password setting and check.
         debian11cis_bootloader_password_hash: "{{ grub_user_pass }}"
         debian11cis_set_grub_user_pass: true
         debian11cis_grub_user_passwd: "{{ grub_user_passwd }}"
