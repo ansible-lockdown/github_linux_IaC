@@ -431,7 +431,7 @@ graph TD;
   D --> E[Send Tracking Start Notifications]
   E --> F[benchmark_promote.yml Runs Daily]
   F --> G{Is Issue 90+ Days Old?}
-  G -- No --> H[Send Milestone Reminders (30/60/90 Days)]
+  G -- No --> H[Send Milestone Reminders 30/60/90 Days]
   G -- Yes --> I{Already Promoted?}
   I -- Yes --> J[Close Issue, Send Notifications]
   I -- No --> K[Create PR to Public Repo]
@@ -609,14 +609,6 @@ flowchart TD
 ## 🧩 Contributing
 
 Pull requests are welcome. When you open your first PR, a Discord invite will be sent automatically (if enabled). Ensure your repo is configured with the appropriate variables and secrets to execute workflows.
-
-
-
-
-
-
-
-
 
 # Github linux IaC
 
