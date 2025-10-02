@@ -1,0 +1,197 @@
+---
+
+name: Export Public Repo Badges IaC
+
+on:
+  workflow_call:
+    inputs:
+      repo_name:
+        required: true
+        type: string
+    secrets:
+      BADGE_PUSH_TOKEN:
+        required: true
+
+jobs:
+  export:
+    if: github.repository_visibility == 'public' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref_name == 'devel' || github.ref_name == 'main')))
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set repo name and output path
+        run: |
+          repo_short=$(basename "${{ inputs.repo_name }}")
+          echo "REPO_SHORT=$repo_short" >> $GITHUB_ENV
+          mkdir -p output/badges/$repo_short
+
+      ##################################################
+      #              Generate Badge Files              #
+      ##################################################
+
+      - name: Generate badge JSON files
+        env:
+          GH_TOKEN: ${{ secrets.BADGE_PUSH_TOKEN }}
+        run: |
+          OUT_DIR=output/badges/$REPO_SHORT
+
+          # Default branch badge
+          default_branch=$(gh repo view "${{ inputs.repo_name }}" --json defaultBranchRef --jq '.defaultBranchRef.name')
+          echo '{ "schemaVersion": 1, "label": "Release Branch", "message": "'"$default_branch"'", "color": "brightgreen" }' > $OUT_DIR/release-branch.json
+
+          ##################################################
+          #         Benchmark Version from Branches        #
+          ##################################################
+
+          # Benchmark version badge from README.md (main branch)
+          echo "Cloning main branch of ${{ inputs.repo_name }}..."
+          git clone --depth 1 --branch main https://github.com/${{ inputs.repo_name }}.git tmp_repo_main
+          if [ ! -f tmp_repo_main/README.md ]; then
+            version_main="Unknown"
+            echo "README.md not found in main branch"
+          else
+            cd tmp_repo_main
+            version_main=$(grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' README.md | head -n1)
+            if [ -z "$version_main" ]; then
+              version_main=$(grep -Eo 'Version [0-9]+, Rel [0-9]+' README.md | head -n1)
+            fi
+            cd ..
+          fi
+          rm -rf tmp_repo_main
+
+          if [ -z "$version_main" ]; then version_main="Unknown"; fi
+          echo "Extracted Benchmark Version from main: $version_main"
+          echo '{ "schemaVersion": 1, "label": "Benchmark Version (main)", "message": "'"$version_main"'", "color": "blue" }' > $OUT_DIR/benchmark-version-main.json
+
+          # Benchmark version badge from README.md (devel branch)
+          echo "Cloning devel branch of ${{ inputs.repo_name }}..."
+          git clone --depth 1 --branch devel https://github.com/${{ inputs.repo_name }}.git tmp_repo_devel
+          if [ ! -f tmp_repo_devel/README.md ]; then
+            version_devel="Unknown"
+            echo "README.md not found in devel branch"
+          else
+            cd tmp_repo_devel
+            version_devel=$(grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' README.md | head -n1)
+            if [ -z "$version_devel" ]; then
+              version_devel=$(grep -Eo 'Version [0-9]+, Rel [0-9]+' README.md | head -n1)
+            fi
+            cd ..
+          fi
+          rm -rf tmp_repo_devel
+
+          if [ -z "$version_devel" ]; then version_devel="Unknown"; fi
+          echo "Extracted Benchmark Version from devel: $version_devel"
+          echo '{ "schemaVersion": 1, "label": "Benchmark Version (devel)", "message": "'"$version_devel"'", "color": "blue" }' > $OUT_DIR/benchmark-version-devel.json
+
+          ##################################################
+          #            Pre-Commit.ci Status Badge          #
+          ##################################################
+
+          if [ "$GITHUB_REF_NAME" = "devel" ]; then
+            echo "Running pre-commit badge logic for devel branch..."
+
+            repo="${{ inputs.repo_name }}"
+            repo_short=$(basename "$repo")
+
+            echo "Cloning devel branch of $repo..."
+            if ! git clone --depth 1 --branch devel https://github.com/$repo.git tmp_precheck; then
+              echo "Failed to clone devel branch of $repo"
+              exit 1
+            fi
+            if [ -f tmp_precheck/.pre-commit-config.yaml ]; then
+              echo ".pre-commit-config.yaml found"
+              has_config=true
+            else
+              echo ".pre-commit-config.yaml NOT found"
+              has_config=false
+            fi
+
+            commit_sha=$(gh api "repos/$repo/commits/devel" --jq .sha)
+            check_data=$(gh api "repos/$repo/commits/$commit_sha/check-runs" -H "Accept: application/vnd.github+json")
+            echo "$check_data" | jq -r '.check_runs[] | .name' > "$OUT_DIR/check-runs-debug.log"
+
+            conclusion=$(echo "$check_data" | jq -r '.check_runs[] | select(.name | startswith("pre-commit.ci")) | .conclusion' | head -n1)
+            has_check=$([ -n "$conclusion" ] && echo true || echo false)
+
+            rm -rf tmp_precheck
+
+            if [ "$has_config" = true ] && [ "$has_check" = true ]; then
+              result="Enabled"
+              color="yellow"
+            elif [ "$has_config" = false ] && [ "$has_check" = false ]; then
+              result="Not Configured"
+              color="lightgrey"
+            elif [ "$has_config" = true ] && [ "$has_check" = false ]; then
+              result="App Not Enabled"
+              color="red"
+            elif [ "$has_config" = false ] && [ "$has_check" = true ]; then
+              result="Config Not Present"
+              color="red"
+            else
+              result="Unknown"
+              color="lightgrey"
+            fi
+
+            echo "Final pre-commit-ci status: $result"
+            echo '{ "schemaVersion": 1, "label": "pre-commit-ci", "message": "'"$result"'", "color": "'"$color"'" }' > "$OUT_DIR/pre-commit-ci.json"
+
+          else
+            echo "Skipping pre-commit-ci badge logic (not on devel branch)"
+          fi
+
+      ##################################################
+      #             GitHub Pages Output Prep           #
+      ##################################################
+
+      - name: Add .nojekyll
+        run: touch output/.nojekyll
+
+      - name: Clone and prepare badge folder
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+          echo "Cloning self_hosted branch of github_linux_IaC..."
+          git clone --branch self_hosted https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/ansible-lockdown/github_linux_IaC.git target
+
+          repo_short=$(basename "${{ inputs.repo_name }}")
+
+          echo "Preparing target badge directory: target/badges/$repo_short"
+          mkdir -p target/badges/$repo_short
+
+          echo "Syncing badge files with rsync (only changed files copied)..."
+          if [ -d "output/badges/$repo_short" ]; then
+            rsync -a --delete --checksum --itemize-changes output/badges/$repo_short/ target/badges/$repo_short/ | tee sync_log.txt
+          else
+            echo "Warning: No badge output found in output/badges/$repo_short"
+          fi
+
+          echo "Rsync summary of updated/copied/removed files:"
+          cat sync_log.txt || echo "No rsync output available"
+
+          echo "Final contents of target/badges/$repo_short:"
+          ls -al target/badges/$repo_short || echo "Folder does not exist or is empty"
+
+      ##################################################
+      #              Commit and Push Changes           #
+      ##################################################
+      - name: Commit and push to self_hosted branch
+        run: |
+          repo_short=$(basename "${{ inputs.repo_name }}")
+          cd target
+
+          echo "Running git status before commit:"
+          git status
+
+          echo "Staging changes:"
+          git add badges/$repo_short
+
+          echo "Showing staged changes:"
+          git diff --cached || echo "No staged changes diff"
+
+          if git diff --cached --quiet; then
+            echo "No changes detected – skipping commit."
+          else
+            echo "Changes detected – committing and pushing to self_hosted..."
+            git commit -m "Update PUBLIC badges for $repo_short"
+            git push origin self_hosted
+          fi

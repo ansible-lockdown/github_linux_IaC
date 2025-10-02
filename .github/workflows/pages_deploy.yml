@@ -1,0 +1,59 @@
+# .github/workflows/pages_deploy.yml
+# ----------------------------------------------------------
+# Publishes the FULL site (repo root) to GitHub Pages
+# on an ~70-minute cadence using plain cron.
+#
+# Important:
+# - GitHub cron uses UTC. The unavoidable "long gap" is placed
+#   at 03:10→05:00 UTC, which is ~11:10pm→1:00am in New York
+#   (during Daylight Saving Time).
+# - Uses a single deploy job; once started it will not be canceled.
+# - .nojekyll ensures JSON endpoints (e.g., /badges/*.json) work.
+# ----------------------------------------------------------
+
+name: Pages Deploy (~70m, long gap ~11pm–1am ET)
+
+on:
+  schedule:
+    # UTC times (designed so the one long gap lands ~11pm–1am America/New_York)
+    - cron: "0 2,5,12,19 * * *"    # 02:00, 05:00, 12:00, 19:00 UTC
+    - cron: "10 3,6,13,20 * * *"   # 03:10, 06:10, 13:10, 20:10 UTC
+    - cron: "20 7,14,21 * * *"     # 07:20, 14:20, 21:20 UTC
+    - cron: "30 8,15,22 * * *"     # 08:30, 15:30, 22:30 UTC
+    - cron: "40 9,16,23 * * *"     # 09:40, 16:40, 23:40 UTC
+    - cron: "50 0,10,17 * * *"     # 00:50, 10:50, 17:50 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy full site (root)
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    # Let a deploy finish once it starts; avoid starvation.
+    concurrency:
+      group: pages-deploy-live
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout site (self_hosted)
+        uses: actions/checkout@v4
+        with:
+          ref: self_hosted
+
+      # Keep JSON/raw endpoints (e.g., /badges/*.json) intact
+      - name: Ensure no Jekyll processing
+        run: touch .nojekyll
+
+      - name: Upload Pages artifact (root)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

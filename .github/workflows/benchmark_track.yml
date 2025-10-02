@@ -1,0 +1,482 @@
+---
+
+name: Benchmark Tracker - Init
+
+on:
+  workflow_call:
+    inputs:
+      repo_name:
+        required: true
+        type: string
+    secrets:
+      TEAMS_WEBHOOK_URL:
+        required: true
+      BADGE_PUSH_TOKEN:
+        required: true
+      DISCORD_WEBHOOK_URL:
+        required: true
+
+jobs:
+  init:
+    name: Setup Benchmark Tracking
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Validate required secrets
+        run: |
+          if [ -z "${{ secrets.TEAMS_WEBHOOK_URL }}" ]; then
+            echo "TEAMS_WEBHOOK_URL is not set."
+            exit 1
+          fi
+
+      - name: Validate calling repository is Private
+        if: ${{ !startsWith(inputs.repo_name, 'ansible-lockdown/Private-') }}
+        run: |
+          echo "This workflow must be called by ansible-lockdown/Private-* repos."
+          exit 1
+
+      - name: Extract short repo name and public repo equivalent
+        id: names
+        run: |
+          repo_full="${{ inputs.repo_name }}"
+          repo_short=$(basename "$repo_full")
+          public_name=$(echo "$repo_short" | sed 's/^Private-//')
+          echo "repo_short=$repo_short" >> $GITHUB_OUTPUT
+          echo "public_repo=ansible-lockdown/$public_name" >> $GITHUB_OUTPUT
+
+      - name: Clone private repo to extract benchmark version
+        id: version-check
+        run: |
+          echo "Cloning latest branch of ${{ inputs.repo_name }} to extract version..."
+          git clone --depth 1 --branch latest https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/${{ inputs.repo_name }}.git privaterepo
+
+          if [ ! -f privaterepo/README.md ]; then
+            echo "README.md not found in latest branch of ${{ inputs.repo_name }}"
+            version="Unknown"
+          else
+            cd privaterepo
+            version=$(grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' README.md | head -n1)
+            if [ -z "$version" ]; then
+              version=$(grep -Eo 'Version [0-9]+, Rel [0-9]+' README.md | head -n1)
+            fi
+            if [ -z "$version" ]; then
+              echo "Unable to determine version from README.md"
+              exit 1
+            fi
+          fi
+
+          echo "Extracted version: $version"
+          echo "version=$version" >> $GITHUB_ENV
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Check version in public devel branch
+        id: public-check
+        run: |
+          echo "Cloning devel branch of ${{ steps.names.outputs.public_repo }} to extract version..."
+          if ! git clone --depth 1 --branch devel https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/${{ steps.names.outputs.public_repo }}.git publicrepo 2>/dev/null; then
+            echo "Public repo does not exist or cannot be cloned."
+            pub_ver="__MISSING__"
+          elif [ ! -f publicrepo/README.md ]; then
+            echo "README.md missing in public repo."
+            pub_ver="__MISSING__"
+          else
+            cd publicrepo
+            pub_ver=$(grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' README.md | head -n1)
+            if [ -z "$pub_ver" ]; then
+              pub_ver=$(grep -Eo 'Version [0-9]+, Rel [0-9]+' README.md | head -n1)
+            fi
+            if [ -z "$pub_ver" ]; then
+              echo "Unable to determine version from README.md"
+              pub_ver="__MISSING__"
+            fi
+          fi
+
+          echo "Extracted public version: $pub_ver"
+          echo "public_version=$pub_ver" >> $GITHUB_ENV
+          echo "public_version=$pub_ver" >> $GITHUB_OUTPUT
+
+      - name: Decide if tracking is needed
+        id: tracking-needed
+        run: |
+          if [ "${{ steps.version-check.outputs.version }}" = "${{ steps.public-check.outputs.public_version }}" ]; then
+            echo "No tracking needed: version already in public repo."
+            echo "needed=false" >> $GITHUB_OUTPUT
+          else
+            echo "Tracking needed: version is not yet in public repo."
+            echo "needed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if benchmark-90day label already exists
+        id: label-exists
+        run: |
+          if gh label list -R ${{ inputs.repo_name }} | grep -q '^benchmark-90day'; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Ensure benchmark-90day label exists
+        id: ensure-label
+        run: |
+          if ! gh label list -R ${{ inputs.repo_name }} | grep -q '^benchmark-90day'; then
+            echo "Creating missing label: benchmark-90day"
+            gh label create benchmark-90day \
+              --color FFA500 \
+              --description "Tracks 90-day benchmark promotion" \
+              -R ${{ inputs.repo_name }}
+          else
+            echo "Label benchmark-90day already exists"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Calculate 90-day and 95-day (auto) dates
+        id: calcdate
+        run: |
+          due_date=$(date -u -d "+90 days" +"%Y-%m-%d")
+          auto_date=$(date -u -d "+95 days" +"%Y-%m-%d")
+          echo "due_date=$due_date" >> $GITHUB_OUTPUT
+          echo "auto_date=$auto_date" >> $GITHUB_OUTPUT
+
+      # - name: Install GitHub Projects CLI extension
+      #   run: gh extension install github/gh-projects
+
+      # - name: Add issue to Benchmark-Tracking project
+      #   if: steps.tracking-needed.outputs.needed == 'true'
+      #   run: |
+      #     gh projects item-add \
+      #       --owner ansible-lockdown \
+      #       --number 3 \
+      #       --content-id "${{ steps.create-issue.outputs.issue_id }}"
+
+      - name: Create tracking issue in Subscriber repo
+        id: create-tracking
+        if: steps.tracking-needed.outputs.needed == 'true'
+        env:
+          version: ${{ steps.version-check.outputs.version }}
+        run: |
+          repo_short=$(basename "${{ inputs.repo_name }}")
+          title="[${repo_short}] Track promotion of $version to public"
+          existing=$(gh issue list -R ${{ inputs.repo_name }} --state open --search "$title" --json number --jq '.[].number')
+          if [ -n "$existing" ]; then
+            echo "Issue already exists: #$existing"
+            echo "issue_created=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          gh issue create \
+            --repo ${{ inputs.repo_name }} \
+            --title "$title" \
+            --body "This issue tracks promotion of version $version from Subscriber to Community. Due: 90 days from now." \
+            --label benchmark-90day
+
+          echo "issue_created=true" >> $GITHUB_OUTPUT
+
+      - name: Install GitHub Projects CLI extension
+        if: steps.tracking-needed.outputs.needed == 'true' && steps.create-tracking.outputs.issue_created == 'true'
+        run: gh extension install github/gh-projects
+
+      - name: Add issue to Benchmark-Tracking GitHub Project and set status/type/dates
+        if: steps.tracking-needed.outputs.needed == 'true' && steps.create-tracking.outputs.issue_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.BADGE_PUSH_TOKEN }} # Use PAT with project scope
+          version: ${{ steps.version-check.outputs.version }}
+          repo_full: ${{ inputs.repo_name }}
+        run: |
+          set -euo pipefail
+
+          repo_short=$(basename "$repo_full")
+          title="[${repo_short}] Track promotion of $version to public"
+          echo "Processing issue title: $title"
+
+          #### Fetch issue number ####
+          issue_number=$(gh issue list -R "$repo_full" --state open --json number,title \
+            | jq -r --arg TITLE "$title" '.[] | select(.title == $TITLE) | .number')
+
+          if [ -z "$issue_number" ]; then
+            echo "Failed to find issue number matching exact title."
+            exit 1
+          fi
+
+          #### Get issue URL ####
+          issue_url="https://github.com/$repo_full/issues/$issue_number"
+          echo "Issue URL: $issue_url"
+
+          #### Verify project exists and get PROJECT_ID ####
+          PROJECT_ID=$(gh projects list --org ansible-lockdown --format json \
+            | jq -r '.projects[] | select(.number==3) | .id')
+
+          if [ -z "$PROJECT_ID" ]; then
+            echo "Project number 3 not found in ansible-lockdown org. Exiting."
+            exit 1
+          fi
+          echo "Found Project ID: $PROJECT_ID"
+
+          #### Add issue to project ####
+          echo "Adding issue #$issue_number to project 3..."
+          gh projects item-add 3 --org ansible-lockdown --url "$issue_url"
+
+          #### Retrieve project item ID after adding with retry ####
+          attempt=0
+          max_attempts=5
+          sleep_seconds=3
+
+          while [ $attempt -lt $max_attempts ]; do
+            output=$(gh projects item-list 3 --org ansible-lockdown --format json || echo "")
+
+            if [ -z "$output" ]; then
+              echo "Attempt $((attempt+1)): No output from gh projects item-list. Retrying..."
+            else
+              project_item_id=$(echo "$output" | jq -r --arg url "$issue_url" '.items[] | select(.content.url==$url) | .id')
+              if [ -n "$project_item_id" ]; then
+                echo "Found project item ID: $project_item_id"
+                break
+              else
+                echo "Attempt $((attempt+1)): Issue not yet in project items list. Retrying..."
+              fi
+            fi
+
+            attempt=$((attempt + 1))
+            sleep $sleep_seconds
+          done
+
+          if [ -z "$project_item_id" ]; then
+            echo "Failed to retrieve project item ID for issue #$issue_number after $max_attempts attempts."
+            exit 1
+          fi
+
+          #### Function to set a select field value ####
+          set_select_field() {
+            local field_name="$1"
+            local option_value="$2"
+
+            field_id=$(gh projects field-list 3 --org ansible-lockdown --format json \
+              | jq -r '.fields[] | select(.name=="'"$field_name"'") | .id')
+
+            option_id=$(gh projects field-list 3 --org ansible-lockdown --format json \
+              | jq -r '.fields[] | select(.name=="'"$field_name"'") | .options[] | select(.name=="'"$option_value"'") | .id')
+
+            if [ -n "$field_id" ] && [ -n "$option_id" ]; then
+              echo "Setting $field_name to $option_value..."
+              gh projects item-edit --id "$project_item_id" --project-id "$PROJECT_ID" \
+                --field-id "$field_id" --single-select-option-id "$option_id"
+            else
+              echo "$field_name field or option '$option_value' not found."
+            fi
+          }
+
+          #### Set Status to In Progress ####
+          set_select_field "Status" "In Progress"
+
+          #### Set Type to Task ####
+          set_select_field "Type" "Task"
+
+          #### Calculate dates ####
+          start_date=$(date -u +"%Y-%m-%d")
+          date_30=$(date -u -d "+30 days" +"%Y-%m-%d")
+          date_60=$(date -u -d "+60 days" +"%Y-%m-%d")
+          date_90=$(date -u -d "+90 days" +"%Y-%m-%d")
+          date_95=$(date -u -d "+95 days" +"%Y-%m-%d")
+
+          #### Update date fields ####
+          echo "Updating date fields..."
+          for field in "Start Date:$start_date" "30 Days:$date_30" "60 Days:$date_60" "90 Days:$date_90" "95 Days:$date_95"; do
+            fname="${field%%:*}"
+            fvalue="${field##*:}"
+
+            fid=$(gh projects field-list 3 --org ansible-lockdown --format json \
+              | jq -r '.fields[] | select(.name=="'"$fname"'") | .id')
+
+            if [ -n "$fid" ]; then
+              echo "Setting $fname to $fvalue..."
+              gh projects item-edit --id "$project_item_id" --project-id "$PROJECT_ID" \
+                --field-id "$fid" --date "$fvalue"
+            else
+              echo "Field $fname not found."
+            fi
+          done
+
+      - name: Debug Webhook Value
+        run: |
+          echo "::warning ::Webhook starts with: ${TEAMS_WEBHOOK_URL:0:20}..."
+          echo "TEAMS_WEBHOOK_URL length: ${#TEAMS_WEBHOOK_URL}"
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+
+      - name: Debug tracking-needed, label-exists, public-version
+        run: |
+          echo "Tracking Needed: ${{ steps.tracking-needed.outputs.needed }}"
+          echo "Label Exists: ${{ steps.label-exists.outputs.exists }}"
+          echo "Public Version: ${{ steps.public-check.outputs.public_version }}"
+
+      - name: Send Teams alert if public repo is missing
+        if: steps.tracking-needed.outputs.needed == 'true' && steps.public-check.outputs.public_version == '__MISSING__' && steps.create-tracking.outputs.issue_created == 'true'
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          version: ${{ steps.version-check.outputs.version }}
+          repo_name: ${{ inputs.repo_name }}
+          public_repo: ${{ steps.names.outputs.public_repo }}
+        run: |
+          echo "::debug ::Webhook starts with: ${TEAMS_WEBHOOK_URL:0:20}..."
+          echo "::debug ::Repo Name: ${repo_name}"
+          echo "::debug ::Version: ${version}"
+          curl -X POST "$TEAMS_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d @- <<EOF
+          {
+            "attachments": [{
+              "contentType": "application/vnd.microsoft.card.adaptive",
+              "content": {
+                "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "type": "AdaptiveCard",
+                "version": "1.4",
+                "body": [
+                  {
+                    "type": "TextBlock",
+                    "size": "Large",
+                    "weight": "Bolder",
+                    "color": "Warning",
+                    "text": "🚨 Tracking Started — But There's A Problem 🚨"
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "Benchmark version '${version}' from **${repo_name}** has entered the 90-day tracking window.",
+                    "wrap": true,
+                    "spacing": "Medium"
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "⚠️ However, the corresponding public repo **${public_repo}** is missing or not yet ready (e.g. no \`devel\` branch with a README.md).",
+                    "wrap": true,
+                    "spacing": "Medium"
+                  },
+                  {
+                    "type": "FactSet",
+                    "facts": [
+                      { "title": "🔒 Subscriber Repo:", "value": "${repo_name}" },
+                      { "title": "📦 Subscriber Version:", "value": "${version}" },
+                      { "title": "🌐 Expected Community Repo:", "value": "${public_repo}" }
+                    ]
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "📢 Please create and prepare the community repo to enable successful promotion at day 90.",
+                    "wrap": true,
+                    "spacing": "Medium"
+                  }
+                ]
+              }
+            }]
+          }
+          EOF
+
+      - name: Send Teams notification about tracking start
+        if: steps.tracking-needed.outputs.needed == 'true' && steps.public-check.outputs.public_version != '__MISSING__' && steps.create-tracking.outputs.issue_created == 'true'
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          version: ${{ steps.version-check.outputs.version }}
+          public_version: ${{ steps.public-check.outputs.public_version }}
+          repo_name: ${{ inputs.repo_name }}
+          public_repo: ${{ steps.names.outputs.public_repo }}
+          due_date: ${{ steps.calcdate.outputs.due_date }}
+          auto_date: ${{ steps.calcdate.outputs.auto_date }}
+        run: |
+          echo "::debug ::Webhook starts with: ${TEAMS_WEBHOOK_URL:0:20}..."
+          echo "::debug ::Repo Name: ${repo_name}"
+          echo "::debug ::Version: ${version}"
+          curl -X POST "$TEAMS_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d @- <<EOF
+          {
+            "attachments": [{
+              "contentType": "application/vnd.microsoft.card.adaptive",
+              "content": {
+                "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "type": "AdaptiveCard",
+                "version": "1.4",
+                "body": [
+                  {
+                    "type": "TextBlock",
+                    "size": "Large",
+                    "weight": "Bolder",
+                    "text": "🚀 Tracking Initiated - ${version}"
+                  },
+                  {
+                    "type": "TextBlock",
+                    "size": "Large",
+                    "weight": "Bolder",
+                    "wrap": true,
+                    "text": "${repo_name} has entered the promotion queue."
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "The ${version} release has entered its 90-day review window and is now being tracked for community publication.",
+                    "wrap": true,
+                    "spacing": "Medium"
+                  },
+                  {
+                    "type": "FactSet",
+                    "facts": [
+                      { "title": "🔒 Subscriber Repo:", "value": "${repo_name}" },
+                      { "title": "📦 Subscriber Version:", "value": "${version}" },
+                      { "title": " ", "value": " " },
+                      { "title": "🌐 Community Target:", "value": "${public_repo}" },
+                      { "title": "📦 Community Version:", "value": "${public_version}" },
+                      { "title": " ", "value": " " },
+                      { "title": "⏳ Subscriber Review Ends:", "value": "Approx: ${due_date}" },
+                      { "title": "🗓️ Auto-Promotion Date To Community:", "value": "Approx: ${auto_date}" },
+                      { "title": " ", "value": " " },
+                      { "title": "📅 Promotion In:", "value": "90 days" }
+                    ]
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "⏳ Please ensure the public repo is ready for promotion.",
+                    "wrap": true,
+                    "spacing": "Medium"
+                  }
+                ]
+              }
+            }]
+          }
+          EOF
+
+      - name: Send Discord notification about tracking start
+        if: steps.tracking-needed.outputs.needed == 'true' && steps.create-tracking.outputs.issue_created == 'true'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          version: ${{ steps.version-check.outputs.version }}
+          public_version: ${{ steps.public-check.outputs.public_version }}
+          repo_name: ${{ inputs.repo_name }}
+          public_repo: ${{ steps.names.outputs.public_repo }}
+          due_date: ${{ steps.calcdate.outputs.due_date }}
+          auto_date: ${{ steps.calcdate.outputs.auto_date }}
+        run: |
+          curl -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d @- <<EOF
+          {
+            "embeds": [{
+              "title": "🚀 Benchmark Release To Community Tracking Started",
+              "color": 5814783,
+              "fields": [
+                { "name": " ", "value": " " },
+                { "name": " ", "value": " " },
+                { "name": "🔒 Subscriber Repo:", "value": "${repo_name}", "inline": false },
+                { "name": "📦 Subscriber Version:", "value": "${version}", "inline": true },
+                { "name": " ", "value": " " },
+                { "name": "🌐 Community Repo:", "value": "${public_repo}", "inline": false },
+                { "name": "📦 Community Version:", "value": "${public_version}", "inline": true },
+                { "name": " ", "value": " " },
+                { "name": "⏳ Subscriber Review Ends:", "value": "Approx: ${due_date}", "inline": false },
+                { "name": "🗓️ Auto-Promotion Date To Public:", "value": "Approx: ${auto_date}", "inline": false }
+              ],
+              "footer": {
+                "text": "Lockdown GitHub Benchmark Tracker"
+              }
+            }]
+          }
+          EOF
