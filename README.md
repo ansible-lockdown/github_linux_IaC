@@ -584,11 +584,11 @@ This repository includes a **scheduled GitHub Pages deployment** workflow (`.git
 
 ```mermaid
 flowchart TD
-    A[Scheduled Trigger (~70m cadence) \n UTC cron times] --> B[Checkout repo root (self_hosted branch)]
+    A[Scheduled Trigger ~70m cadence \n UTC cron times] --> B[Checkout repo root self_hosted branch]
     B --> C[Create .nojekyll to preserve JSON/raw files]
     C --> D[Upload site as Pages artifact]
     D --> E[Deploy to GitHub Pages environment]
-    E --> F[Public site updated \n (e.g., /badges/*.json endpoints)]
+    E --> F[Public site updated \n e.g., /badges/*.json endpoints]
 ```
 
 #### Cron Schedule Overview
