@@ -95,10 +95,17 @@ resource "local_file" "inventory" {
         rhel10cis_bootloader_password_hash: grub.pbkdf2.sha512.10000.9306A36764A7BEA3BF492D1784396B27F52A71812E9955A58709F94EE70697F9BD5366F36E07DEC41B52279A056E2862A93E42069D7BBB08F5DFC2679CD43812.6C32ADA5449303AD5E67A4C150558592A05381331DE6B33463469A236871FA8E70738C6F9066091D877EF88A213C86825E093117F30E9E1BF158D0DB75E7581B  # pragma: allowlist secret
         rhel10cis_authselect_custom_profile_name: mpg-cis
         ### Debian variables
+        deb11cis_purge_apt: true
         deb11cis_disruption_high: true
+        debian11cis_disruption_high: true
         deb11cis_rule_5_2_4: false  # Skips connecting use sudo check
         deb11cis_rule_5_4_2_4: false  #Skips root password setting and check.
-        deb11cis_purge_apt: true
+        debian11cis_bootloader_password_hash: "{{ grub_user_pass }}"
+        debian11cis_set_grub_user_pass: true
+        debian11cis_grub_user_passwd: "{{ grub_user_passwd }}"
+        debian11cis_root_pw: "{{ root_passwd }}"
+        debian11cis_purge_apt: true
+        debian11cis_allow_common_auth_rewrite: true
         deb12cis_disruption_high: true
         deb12cis_bootloader_password_hash: "{{ grub_user_pass }}"
         deb12cis_rule_5_2_4: false  # User password set (breaks sudo)
