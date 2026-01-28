@@ -67,6 +67,7 @@ resource "local_file" "inventory" {
         - ec2-user
         - rocky
         - vagrant
+        - ubuntu
         rhel8cis_authselect_custom_profile_name: mpg_test
         rhel8cis_bootloader_password_hash: "grub.pbkdf2.sha512.blah"
         rhel8cis_set_boot_pass: true
@@ -129,7 +130,8 @@ resource "local_file" "inventory" {
         ubtu24cis_rule_5_4_2_4: false  # root password set
         ubtu24cis_set_grub_user_pass: true
         ubtu24cis_grub_user_passwd: "{{ grub_user_passwd }}"
-        ubtu24gitstig_audit_log_filesystem: '/'
+        ubtu24stig_audit_log_filesystem: '/'
+        ubtu24stig_sudoers_exclude_nopasswd_list: "{{ sudoers_exclude_nopasswd_list }}"
     EOF
   provisioner "local-exec" {
     command = "/opt/ansible_2.16.6_venv/bin/ansible-playbook -i hosts.yml /opt/local_playbooks/change_hostname.yml"
