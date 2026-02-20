@@ -132,6 +132,8 @@ resource "local_file" "inventory" {
         ubtu22cis_set_grub_user_pass: true
         ubtu22cis_grub_user_passwd: "{{ grub_user_passwd }}"
         ubtu22stig_audit_log_filesystem: '/'
+        skip_pro_subscription_check: true
+        ub22stig_disruption_high: true
         ubtu24cis_rule_5_2_4: false  # User password
         ubtu24cis_rule_5_4_2_4: false  # root password set
         ubtu24cis_set_grub_user_pass: true
