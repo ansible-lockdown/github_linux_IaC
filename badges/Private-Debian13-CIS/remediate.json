@@ -1,1 +1,1 @@
-{ "schemaVersion": 1, "label": "Remediate Pipeline", "message": "Failing", "color": "red" }
+{ "schemaVersion": 1, "label": "Remediate Pipeline", "message": "Passing", "color": "brightgreen" }
