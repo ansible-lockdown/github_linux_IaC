@@ -122,6 +122,7 @@ resource "local_file" "inventory" {
         deb13cis_bootloader_password_hash: "{{ grub_user_pass }}"
         deb13cis_rule_5_2_4: false  # User password set (breaks sudo)
         deb13cis_rule_5_4_2_4: false  # Root password is set
+        deb13cis_disable_dynamic_motd: true
         ## Ubuntu variables
         ubtu20cis_bootloader_password_hash: "{{ grub_user_pass }}"
         ubtu20cis_root_pw: "{{ root_passwd }}"
