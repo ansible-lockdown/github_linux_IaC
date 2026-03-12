@@ -90,3 +90,9 @@ variable "privsubnet_id" {
   type        = string
   sensitive   = true
 }
+
+variable "ansible_version" {
+  description = "The version of ansible to run for local tasks"
+  type        = string
+  sensitive   = true
+}
