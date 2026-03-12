@@ -144,7 +144,7 @@ resource "local_file" "inventory" {
         ubtu24stig_sudoers_exclude_nopasswd_list: "{{ sudoers_exclude_nopasswd_list }}"
     EOF
   provisioner "local-exec" {
-    command = "/opt/${var.ansible_version}/bin/ansible-playbook -i hosts.yml /opt/local_playbooks/change_hostname.yml"
+    command = "/opt/ansible_${var.ansible_version}_venv/bin/ansible-playbook -i hosts.yml /opt/local_playbooks/change_hostname.yml"
     environment = {
       ANSIBLE_HOST_KEY_CHECKING = "false"
     }
