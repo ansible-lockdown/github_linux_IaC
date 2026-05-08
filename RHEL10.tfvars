@@ -4,7 +4,7 @@
 # RHEL AMI
 #ami_id        = "ami-03a13a09a711d3871"
 # Alma AMI
-ami_id        = "ami-07c611d7996eed811"
+ami_id        = "ami-02832d8fd3538c9ef"
 # Rocky Linux
 #ami_id        = "ami-0612fe215a271aefb"
 ami_os        = "rhel10"
