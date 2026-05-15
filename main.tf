@@ -108,6 +108,7 @@ resource "local_file" "inventory" {
         rhel10stig_bootloader_password_hash: grub.pbkdf2.sha512.10000.C48412E01537C1976BD74B245CA81B4090BD8BDCA6641280241FB556CA50FA6DD995F1B7D649F6A8614CEADE3BB0D2F862E8BE443919E4BF6B7519943D50DF78.00FE39AC1A320B29106B12A36850C4324763AD9F7012474C3CABEA5523ADB38D48C7A2C60DB3935FE5DC9A8A05D9BF96EA2482F1913137DE985FF494F8390823
         rhel10stig_auditd_required: true
         rhel10stig_allow_fapolicy_updates: true
+        rhel10stig_audit_log_filesystem: '/'
         skip_fips_mode: true
 
         ### Debian variables
