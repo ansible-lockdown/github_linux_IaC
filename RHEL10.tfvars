@@ -4,11 +4,10 @@
 # RHEL AMI
 #ami_id        = "ami-03a13a09a711d3871"
 # Alma AMI
-ami_id        = "ami-02832d8fd3538c9ef"
+ami_id        = "ami-0a038936329f8ecc8"
 # Rocky Linux
 #ami_id        = "ami-0612fe215a271aefb"
 ami_os        = "rhel10"
 ami_username  = "ec2-user"
 ami_user_home = "/home/ec2-user"
-instance_type = "t3.medium"
 benchmark_os  = "RHEL10"
