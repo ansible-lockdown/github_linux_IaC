@@ -14,7 +14,7 @@ variable "availability_zone" {
 
 variable "instance_type" {
   description = "EC2 Instance Type"
-  default     = "t4g.medium"
+  default     = "t3.medium"
   type        = string
 }
 
