@@ -110,6 +110,9 @@ resource "local_file" "inventory" {
         rhel10stig_allow_fapolicy_updates: true
         rhel10stig_audit_log_filesystem: '/'
         skip_fips_mode: true
+       
+        ### Suse Variables
+        suse15cis_rule_1_2_1_1: false
 
         ### Debian variables
         deb11cis_purge_apt: true
