@@ -113,7 +113,7 @@ resource "local_file" "inventory" {
        
         ### Suse Variables
         suse15cis_rule_1_2_1_1: false
-        suse15_zypp_timeout_value: 90
+        suse15_zypp_timeout_value: "90"
 
         ### Debian variables
         deb11cis_purge_apt: true
