@@ -116,6 +116,7 @@ resource "local_file" "inventory" {
         suse15_zypp_timeout_value: "90"
 
         ### Debian variables
+        deb11cis_apt_archive: true
         deb11cis_purge_apt: true
         deb11cis_disruption_high: true
         debian11cis_disruption_high: true
