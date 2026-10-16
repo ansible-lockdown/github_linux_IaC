@@ -46,6 +46,9 @@ jobs:
               exit 1
               ;;
           esac
+          for tool in curl tar sha256sum gh jq; do
+            printf '%s: %s\n' "$tool" "$(command -v "$tool" || echo missing)"
+          done
           cache="${RUNNER_TOOL_CACHE:-$RUNNER_TEMP}/lockdown-badge-tools"
           bin="$RUNNER_TEMP/lockdown-bin"
           mkdir -p "$cache" "$bin"
@@ -99,20 +102,19 @@ jobs:
           echo "repo_short=$repo_short" >> $GITHUB_OUTPUT
           echo "public_repo=ansible-lockdown/$public_name" >> $GITHUB_OUTPUT
 
-      - name: Clone private repo to extract benchmark version
+      - name: Read benchmark version from the private latest README
         id: version-check
+        env:
+          GH_TOKEN: ${{ secrets.BADGE_PUSH_TOKEN }}
         run: |
-          echo "Cloning latest branch of ${{ inputs.repo_name }} to extract version..."
-          git clone --depth 1 --branch latest https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/${{ inputs.repo_name }}.git privaterepo
-
-          if [ ! -f privaterepo/README.md ]; then
+          echo "Reading README.md from the latest branch of ${{ inputs.repo_name }} to extract version..."
+          if ! readme=$(gh api -H "Accept: application/vnd.github.raw" "repos/${{ inputs.repo_name }}/contents/README.md?ref=latest" 2>/dev/null); then
             echo "README.md not found in latest branch of ${{ inputs.repo_name }}"
             version="Unknown"
           else
-            cd privaterepo
-            version=$(grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' README.md | head -n1)
+            version=$(printf '%s\n' "$readme" | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
             if [ -z "$version" ]; then
-              version=$(grep -Eo 'Version [0-9]+, Rel [0-9]+' README.md | head -n1)
+              version=$(printf '%s\n' "$readme" | grep -Eo 'Version [0-9]+, Rel [0-9]+' | head -n1)
             fi
             if [ -z "$version" ]; then
               echo "Unable to determine version from README.md"
@@ -126,19 +128,17 @@ jobs:
 
       - name: Check version in public devel branch
         id: public-check
+        env:
+          GH_TOKEN: ${{ secrets.BADGE_PUSH_TOKEN }}
         run: |
-          echo "Cloning devel branch of ${{ steps.names.outputs.public_repo }} to extract version..."
-          if ! git clone --depth 1 --branch devel https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/${{ steps.names.outputs.public_repo }}.git publicrepo 2>/dev/null; then
-            echo "Public repo does not exist or cannot be cloned."
-            pub_ver="__MISSING__"
-          elif [ ! -f publicrepo/README.md ]; then
-            echo "README.md missing in public repo."
+          echo "Reading README.md from the devel branch of ${{ steps.names.outputs.public_repo }} to extract version..."
+          if ! readme=$(gh api -H "Accept: application/vnd.github.raw" "repos/${{ steps.names.outputs.public_repo }}/contents/README.md?ref=devel" 2>/dev/null); then
+            echo "Public repo, its devel branch or its README.md is missing."
             pub_ver="__MISSING__"
           else
-            cd publicrepo
-            pub_ver=$(grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' README.md | head -n1)
+            pub_ver=$(printf '%s\n' "$readme" | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
             if [ -z "$pub_ver" ]; then
-              pub_ver=$(grep -Eo 'Version [0-9]+, Rel [0-9]+' README.md | head -n1)
+              pub_ver=$(printf '%s\n' "$readme" | grep -Eo 'Version [0-9]+, Rel [0-9]+' | head -n1)
             fi
             if [ -z "$pub_ver" ]; then
               echo "Unable to determine version from README.md"

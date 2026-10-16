@@ -41,6 +41,9 @@ jobs:
               exit 1
               ;;
           esac
+          for tool in curl tar sha256sum gh jq; do
+            printf '%s: %s\n' "$tool" "$(command -v "$tool" || echo missing)"
+          done
           cache="${RUNNER_TOOL_CACHE:-$RUNNER_TEMP}/lockdown-badge-tools"
           bin="$RUNNER_TEMP/lockdown-bin"
           mkdir -p "$cache" "$bin"
@@ -151,20 +154,16 @@ jobs:
           echo '{ "schemaVersion": 1, "label": "Closed Issues", "message": "'"$closed"'", "color": "success" }' > $OUT_DIR/issues-closed.json
 
           # Benchmark version badge
-          echo "Cloning latest branch of ${{ inputs.repo_name }} to extract version..."
-          git clone --depth 1 --branch latest https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/${{ inputs.repo_name }}.git tmp_repo
-          if [ ! -f tmp_repo/README.md ]; then
+          echo "Reading README.md from the latest branch of ${{ inputs.repo_name }} to extract version..."
+          if ! readme=$(gh api -H "Accept: application/vnd.github.raw" "repos/${{ inputs.repo_name }}/contents/README.md?ref=latest" 2>/dev/null); then
             version="Unknown"
             echo "README.md not found"
           else
-            cd tmp_repo
-            version=$(grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' README.md | head -n1)
+            version=$(printf '%s\n' "$readme" | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
             if [ -z "$version" ]; then
-              version=$(grep -Eo 'Version [0-9]+, Rel [0-9]+' README.md | head -n1)
+              version=$(printf '%s\n' "$readme" | grep -Eo 'Version [0-9]+, Rel [0-9]+' | head -n1)
             fi
-            cd ..
           fi
-          rm -rf tmp_repo
 
           if [ -z "$version" ]; then version="Unknown"; fi
 
@@ -182,68 +181,60 @@ jobs:
       - name: Add .nojekyll to prevent GitHub Pages filtering
         run: touch output/.nojekyll
 
-      - name: Clone and prepare badge folder
-        run: |
-          echo "Cloning self_hosted branch of github_linux_IaC..."
-          git clone --branch self_hosted https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/ansible-lockdown/github_linux_IaC.git target
-          git -C target config user.email "actions@github.com"
-          git -C target config user.name "GitHub Actions"
-
-          repo_short=$(basename "${{ inputs.repo_name }}")
-
-          echo "Preparing badge directory: target/badges/$repo_short"
-          mkdir -p target/badges/$repo_short
-
-          echo "Replacing badge files (git reports only the files whose content changed)..."
-          if [ -d "output/badges/$repo_short" ]; then
-            rm -rf "target/badges/$repo_short"
-            mkdir -p "target/badges/$repo_short"
-            cp -a "output/badges/$repo_short/." "target/badges/$repo_short/"
-          else
-            echo "Warning: No badge output found in output/badges/$repo_short"
-          fi
-
-          echo "Files that were updated/copied/removed:"
-          git -C target status --short -- "badges/$repo_short" || echo "No changes"
-
-          echo "Final contents of target/badges/$repo_short:"
-          ls -al target/badges/$repo_short || echo "Folder does not exist or is empty"
-
-      ##################################################
-      #              Commit and Push Changes           #
-      ##################################################
-
-      - name: Commit and push to self_hosted branch
+      - name: Publish badge files through the GitHub API
+        env:
+          GH_TOKEN: ${{ secrets.BADGE_PUSH_TOKEN }}
         run: |
           repo_short=$(basename "${{ inputs.repo_name }}")
-          cd target
+          branch="${BADGE_BRANCH:-self_hosted}"
+          api="repos/ansible-lockdown/github_linux_IaC"
+          src="output/badges/$repo_short"
+          dir="badges/$repo_short"
 
-          echo "Running git status before commit:"
-          git status
-
-          echo "Adding changes to staging:"
-          git add badges/$repo_short
-
-          echo "Showing staged changes:"
-          git diff --cached || true
-
-          if git diff --cached --quiet; then
-            echo "No changes detected – skipping commit."
-          else
-            echo "Changes detected – committing and pushing..."
-            git commit -m "Update PRIVATE badges for $repo_short"
-            for attempt in 1 2 3 4 5; do
-              if git pull --rebase origin self_hosted && git push origin self_hosted; then
-                break
-              fi
-              git rebase --abort 2>/dev/null || true
-              if [ "$attempt" -eq 5 ]; then
-                echo "Push to self_hosted failed after 5 attempts."
-                exit 1
-              fi
-              sleep $((attempt * 5))
-            done
+          if [ ! -d "$src" ]; then
+            echo "Warning: No badge output found in $src"
+            exit 0
           fi
+          new_files=$(find "$src" -maxdepth 1 -type f -name '*.json' -exec basename {} \; | sort)
+          echo "Badge files to publish:"
+          echo "$new_files"
+
+          for attempt in 1 2 3 4 5; do
+            head=$(gh api "$api/git/ref/heads/$branch" --jq .object.sha)
+            base_tree=$(gh api "$api/git/commits/$head" --jq .tree.sha)
+            existing=$(gh api "$api/contents/$dir?ref=$head" --jq '.[] | select(.type == "file") | .name' 2>/dev/null) || existing=""
+
+            entries=$(
+              for f in $new_files; do
+                jq -n --arg path "$dir/$f" --rawfile content "$src/$f" '{path: $path, mode: "100644", type: "blob", content: $content}'
+              done
+              for f in $existing; do
+                if ! grep -qxF "$f" <<< "$new_files"; then
+                  echo "Removing stale badge file $dir/$f" >&2
+                  jq -n --arg path "$dir/$f" '{path: $path, mode: "100644", type: "blob", sha: null}'
+                fi
+              done
+            )
+            new_tree=$(jq -s --arg base "$base_tree" '{base_tree: $base, tree: .}' <<< "$entries" | gh api -X POST "$api/git/trees" --input - --jq .sha)
+
+            if [ "$new_tree" = "$base_tree" ]; then
+              echo "No changes detected - skipping commit."
+              exit 0
+            fi
+
+            commit=$(jq -n --arg msg "Update PRIVATE badges for $repo_short" --arg tree "$new_tree" --arg parent "$head" \
+              '{message: $msg, tree: $tree, parents: [$parent], author: {name: "GitHub Actions", email: "actions@github.com"}}' \
+              | gh api -X POST "$api/git/commits" --input - --jq .sha)
+
+            if gh api -X PATCH "$api/git/refs/heads/$branch" -f sha="$commit" -F force=false --silent; then
+              echo "Published $commit to $branch"
+              exit 0
+            fi
+            echo "Branch $branch moved before the update, retrying ($attempt/5)"
+            sleep $((attempt * 5))
+          done
+          echo "Publishing to $branch failed after 5 attempts."
+          exit 1
 
       - name: Remove workspace clones
         if: always()

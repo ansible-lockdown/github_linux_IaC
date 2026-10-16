@@ -47,6 +47,9 @@ jobs:
               exit 1
               ;;
           esac
+          for tool in curl tar sha256sum gh jq; do
+            printf '%s: %s\n' "$tool" "$(command -v "$tool" || echo missing)"
+          done
           cache="${RUNNER_TOOL_CACHE:-$RUNNER_TEMP}/lockdown-badge-tools"
           bin="$RUNNER_TEMP/lockdown-bin"
           mkdir -p "$cache" "$bin"
@@ -125,12 +128,13 @@ jobs:
               repo_short=$(echo "$repo" | sed 's/^ansible-lockdown\/Private-//')
               public_repo="ansible-lockdown/$repo_short"
 
-              rm -rf tmpclone && mkdir -p tmpclone && cd tmpclone
-
-              echo "Cloning latest branch of $repo to extract version..."
-              git clone --depth 1 --branch latest https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/${{ inputs.repo_name }}.git private || { echo "Failed to clone private repo"; cd ..; rm -rf tmpclone; continue; }
-              priv_ver=$(grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' private/README.md | head -n1)
-              [ -z "$priv_ver" ] && priv_ver=$(grep -Eo 'Version [0-9]+, Rel [0-9]+' private/README.md | head -n1)
+              echo "Reading README.md from the latest branch of $repo to extract version..."
+              if ! readme=$(GH_TOKEN="$BADGE_PUSH_TOKEN" gh api -H "Accept: application/vnd.github.raw" "repos/$repo/contents/README.md?ref=latest" 2>/dev/null); then
+                echo "Failed to read README.md from private repo $repo"
+                continue
+              fi
+              priv_ver=$(printf '%s\n' "$readme" | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+              [ -z "$priv_ver" ] && priv_ver=$(printf '%s\n' "$readme" | grep -Eo 'Version [0-9]+, Rel [0-9]+' | head -n1)
 
               echo "Extracted private version: $priv_ver"
               echo "priv_ver=$priv_ver" >> $GITHUB_ENV
@@ -138,27 +142,22 @@ jobs:
 
               if [ -z "$priv_ver" ]; then
                 echo "[WARN] No version found in private repo $repo. Skipping issue #$number."
-                cd .. && rm -rf tmpclone
                 continue
               fi
 
-              echo "Cloning devel branch of $public_repo to extract version..."
-              git clone --depth 1 --branch devel https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/$public_repo.git public || echo "[WARN] Public repo $public_repo is missing"
-
-              if [ ! -f public/README.md ]; then
-                echo "[WARN] README.md missing in $public_repo"
+              echo "Reading README.md from the devel branch of $public_repo to extract version..."
+              if ! readme=$(GH_TOKEN="$BADGE_PUSH_TOKEN" gh api -H "Accept: application/vnd.github.raw" "repos/$public_repo/contents/README.md?ref=devel" 2>/dev/null); then
+                echo "[WARN] Public repo $public_repo, its devel branch or its README.md is missing"
                 pub_ver="__MISSING__"
               else
-                pub_ver=$(grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' public/README.md | head -n1)
-                [ -z "$pub_ver" ] && pub_ver=$(grep -Eo 'Version [0-9]+, Rel [0-9]+' public/README.md | head -n1)
+                pub_ver=$(printf '%s\n' "$readme" | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+                [ -z "$pub_ver" ] && pub_ver=$(printf '%s\n' "$readme" | grep -Eo 'Version [0-9]+, Rel [0-9]+' | head -n1)
                 [ -z "$pub_ver" ] && pub_ver="__MISSING__"
               fi
 
               echo "Extracted public version: $pub_ver"
               echo "pub_ver=$pub_ver" >> $GITHUB_ENV
               echo "pub_ver=$pub_ver" >> $GITHUB_OUTPUT
-
-              cd .. && rm -rf tmpclone
 
               echo "{
                 \"repo\": \"$repo\",
