@@ -153,13 +153,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Calculate 90-day and 95-day (auto) dates
+      - name: Calculate 90-day due date
         id: calcdate
         run: |
           due_date=$(date -u -d "+90 days" +"%Y-%m-%d")
-          auto_date=$(date -u -d "+95 days" +"%Y-%m-%d")
           echo "due_date=$due_date" >> $GITHUB_OUTPUT
-          echo "auto_date=$auto_date" >> $GITHUB_OUTPUT
 
       # - name: Install GitHub Projects CLI extension
       #   run: gh extension install github/gh-projects
@@ -402,7 +400,6 @@ jobs:
           repo_name: ${{ inputs.repo_name }}
           public_repo: ${{ steps.names.outputs.public_repo }}
           due_date: ${{ steps.calcdate.outputs.due_date }}
-          auto_date: ${{ steps.calcdate.outputs.auto_date }}
         run: |
           echo "::debug ::Webhook starts with: ${TEAMS_WEBHOOK_URL:0:20}..."
           echo "::debug ::Repo Name: ${repo_name}"
@@ -447,7 +444,6 @@ jobs:
                       { "title": "📦 Community Version:", "value": "${public_version}" },
                       { "title": " ", "value": " " },
                       { "title": "⏳ Subscriber Review Ends:", "value": "Approx: ${due_date}" },
-                      { "title": "🗓️ Auto-Promotion Date To Community:", "value": "Approx: ${auto_date}" },
                       { "title": " ", "value": " " },
                       { "title": "📅 Promotion In:", "value": "90 days" }
                     ]
@@ -473,7 +469,6 @@ jobs:
           repo_name: ${{ inputs.repo_name }}
           public_repo: ${{ steps.names.outputs.public_repo }}
           due_date: ${{ steps.calcdate.outputs.due_date }}
-          auto_date: ${{ steps.calcdate.outputs.auto_date }}
         run: |
           curl -X POST "$DISCORD_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
@@ -491,8 +486,7 @@ jobs:
                 { "name": "🌐 Community Repo:", "value": "${public_repo}", "inline": false },
                 { "name": "📦 Community Version:", "value": "${public_version}", "inline": true },
                 { "name": " ", "value": " " },
-                { "name": "⏳ Subscriber Review Ends:", "value": "Approx: ${due_date}", "inline": false },
-                { "name": "🗓️ Auto-Promotion Date To Public:", "value": "Approx: ${auto_date}", "inline": false }
+                { "name": "⏳ Subscriber Review Ends:", "value": "Approx: ${due_date}", "inline": false }
               ],
               "footer": {
                 "text": "Lockdown GitHub Benchmark Tracker"

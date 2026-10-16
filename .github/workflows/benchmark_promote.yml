@@ -16,7 +16,7 @@ on:
 
 jobs:
   monitor-90day-promotions:
-    name: Monitor & Auto-Promote Benchmarks
+    name: Monitor Benchmark Promotions
     runs-on: ${{ startsWith(github.repository, 'ansible-lockdown/Private-') && 'self-hosted' || 'ubuntu-latest' }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -376,7 +376,6 @@ jobs:
             pub_ver=$(jq -r '.pub_ver' "$issue_file")
             age_days=$(jq -r '.age_days' "$issue_file")
             public_repo=$(jq -r '.public_repo' "$issue_file")
-            created_at=$(jq -r '.created_at' "$issue_file")
 
             if [ "$priv_ver" = "$pub_ver" ]; then
               continue
@@ -385,39 +384,21 @@ jobs:
             case $age_days in
               30)
                 message_1="**30-Day Reminder**: Benchmark \`$priv_ver\` from \`$repo\` is scheduled for public promotion in **60 days** (on Day 90)."
-                message_2="If not promoted manually, it will be auto-promoted on **Day 95**."
+                message_2="Promotion is manual. Nothing is promoted automatically."
                 ;;
               60)
                 message_1="**60-Day Reminder**: Benchmark \`$priv_ver\` from \`$repo\` is scheduled for public promotion in **30 days** (on Day 90)."
-                message_2="If not promoted manually, it will be auto-promoted on **Day 95**."
+                message_2="Promotion is manual. Nothing is promoted automatically."
                 ;;
               90)
                 message_1="**90-Day Reminder**: Benchmark \`$priv_ver\` from \`$repo\` is **due for public promotion today**."
-                message_2="If not promoted manually, it will be auto-promoted in **5 days** (on Day 95)."
+                message_2="Promotion is manual. Nothing is promoted automatically."
                 ;;
               *)
                 continue
                 ;;
             esac
 
-            # Calculate scheduled auto-promotion date (Day 95)
-            created_ts=$(date -u -d "$created_at" +%s)
-            auto_ts=$(( created_ts + 95*86400 ))
-            now_ts=$(date -u +%s)
-
-            # Calculate remaining days until auto-promotion (ceil for positive remainder)
-            rem_secs=$(( auto_ts - now_ts ))
-            if [ $rem_secs -le 0 ]; then
-              days_remaining=0
-              in_str="today"
-            else
-              days_remaining=$(( (rem_secs + 86399) / 86400 ))
-              in_str="in ${days_remaining} day(s)"
-            fi
-
-            # Final message value
-            auto_date=$(date -u -d "@$auto_ts" +%Y-%m-%d)
-            auto_msg="$auto_date ($in_str)"
 
             issue_url="https://github.com/${repo}/issues/${number}"
 
@@ -433,7 +414,7 @@ jobs:
                 { "name": " ", "value": " " },
                 { "name": " ", "value": " " },
                 { "name": "📢 Promotion Status", "value": "$message_1", "inline": false },
-                { "name": "⚠️ Auto-Promotion Notice", "value": "$message_2", "inline": false },
+                { "name": "⚠️ Promotion Notice", "value": "$message_2", "inline": false },
                 { "name": " ", "value": " " },
                 { "name": "🔒 Subscriber Repo", "value": "$repo", "inline": false },
                 { "name": "📦 Subscriber Version", "value": "$priv_ver", "inline": true },
@@ -441,7 +422,6 @@ jobs:
                 { "name": "🌐 Target Community Repo", "value": "$public_repo", "inline": false },
                 { "name": " ", "value": " " },
                 { "name": "⏱️ Days Tracked", "value": "$age_days", "inline": true },
-                { "name": "📆 Scheduled Auto-Promotion Date", "value": "$auto_msg", "inline": true },
                 { "name": "🔗 Issue Tracker", "value": "[View Issue #$number]($issue_url)", "inline": false }
               ],
               "footer": {
@@ -452,7 +432,7 @@ jobs:
           EOF
           done
 
-      - name: Send reminder messages for promotion windows (day 85-95)
+      - name: Send reminder messages for promotion windows (days 85-94, then weekly from day 95)
         if: steps.check-issue-data.outputs.should_continue == 'true'
         run: |
           for issue_file in issue_data/*.json; do
@@ -467,7 +447,7 @@ jobs:
               continue
             fi
 
-            if [ "$age_days" -ge 85 ] && [ "$age_days" -lt 95 ]; then
+            if { [ "$age_days" -ge 85 ] && [ "$age_days" -lt 95 ]; } || { [ "$age_days" -ge 95 ] && [ $(( (age_days - 95) % 7 )) -eq 0 ]; }; then
               if [ "$age_days" -eq 90 ]; then
                 reminder_msg="🚨 **Benchmark $priv_ver** from \`$repo\` is due for community release **today** (Day 90)."
                 urgency_note="📢 Please review and promote if everything is ready."
@@ -477,9 +457,8 @@ jobs:
                 urgency_note="📝 Please prepare and review the benchmark."
               else
                 overdue_days=$((age_days - 90))
-                days_until_autopromote=$((95 - age_days))
                 reminder_msg="⚠️ **Benchmark $priv_ver** from \`$repo\` is **overdue by $overdue_days day(s)** (target was Day 90)."
-                urgency_note="⏲️ Auto-promotion will occur in **$days_until_autopromote day(s)** (on Day 95) unless manually promoted."
+                urgency_note="📢 Promotion is manual. Please promote when everything is ready."
               fi
 
               issue_url="https://github.com/${repo}/issues/${number}"
@@ -612,165 +591,6 @@ jobs:
           EOF
             fi
             fi
-          done
-
-      - name: Promote benchmarks (auto on day 95 only)
-        if: steps.check-issue-data.outputs.should_continue == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.BADGE_PUSH_TOKEN }}
-          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-        run: |
-          for issue_file in issue_data/*.json; do
-            repo=$(jq -r '.repo' "$issue_file")
-            number=$(jq -r '.number' "$issue_file")
-            priv_ver=$(jq -r '.priv_ver' "$issue_file")
-            pub_ver=$(jq -r '.pub_ver' "$issue_file")
-            age_days=$(jq -r '.age_days' "$issue_file")
-            public_repo=$(jq -r '.public_repo' "$issue_file")
-
-            if [ "$priv_ver" = "$pub_ver" ] || [ "$age_days" -ne 95 ]; then
-              continue
-            fi
-
-            echo "Auto-promoting $priv_ver from $repo to $public_repo (Issue #$number)..."
-
-            safe_branch=$(echo "$priv_ver" | sed 's/[^a-zA-Z0-9]/_/g' | tr '[:upper:]' '[:lower:]')
-            branch_name="promote_benchmark_$safe_branch"
-
-            mkdir -p promote && cd promote
-            git clone --depth 1 --branch devel https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/$public_repo.git public_repo
-            cd public_repo
-            git checkout -b $branch_name
-
-            git clone --depth 1 --branch latest https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/$repo.git ../private_repo
-            rsync -av --delete --exclude='.git' ../private_repo/ ./
-
-            git config user.name "github-actions"
-            git config user.email "actions@github.com"
-            git add .
-            git commit -s -m "Auto-promoting $priv_ver from $repo"
-            git push https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/$public_repo.git $branch_name
-
-            pr_url=$(gh pr create \
-              --head $branch_name \
-              --base devel \
-              --title "Auto-Promote $priv_ver from $repo" \
-              --body "This PR auto-promotes version $priv_ver from the subscriber repository to commuity as part of the 90-day release policy." \
-              --json url -q .url || echo "")
-
-            cd ../.. && rm -rf promote
-
-          cat <<EOF | curl -X POST "$TEAMS_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d @-
-          {
-            "attachments": [
-              {
-                "contentType": "application/vnd.microsoft.card.adaptive",
-                "content": {
-                  "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                  "type": "AdaptiveCard",
-                  "version": "1.4",
-                  "body": [
-                    {
-                      "type": "TextBlock",
-                      "size": "Large",
-                      "weight": "Bolder",
-                      "color": "Attention",
-                      "text": "🚨 Benchmark PR Automatically Created 🚨"
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "Version **$priv_ver** from **$repo** has been proposed for promotion to **$public_repo**.",
-                      "wrap": true,
-                      "spacing": "Medium"
-                    },
-                    {
-                      "type": "FactSet",
-                      "facts": [
-                        { "title": "🔒 Subscriber Repo", "value": "$repo" },
-                        { "title": "📆 Version", "value": "$priv_ver" },
-                        { "title": "🌐 Community Repo", "value": "$public_repo" },
-                        { "title": "📅 Days Tracked", "value": "$age_days" },
-                        { "title": "🔄 Branch", "value": "$branch_name" }
-                      ]
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "Pull Request created into devel but not auto-merged. [Review PR]($pr_url)",
-                      "wrap": true,
-                      "spacing": "Medium",
-                      "color": "Attention"
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "👉 [Review PR]($pr_url)",
-                      "wrap": true,
-                      "spacing": "Medium"
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-          EOF
-          done
-
-      - name: Send Discord notification for benchmark promotion PR
-        if: steps.check-issue-data.outputs.should_continue == 'true'
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: |
-          for issue_file in issue_data/*.json; do
-            repo=$(jq -r '.repo' "$issue_file")
-            number=$(jq -r '.number' "$issue_file")
-            priv_ver=$(jq -r '.priv_ver' "$issue_file")
-            pub_ver=$(jq -r '.pub_ver' "$issue_file")
-            age_days=$(jq -r '.age_days' "$issue_file")
-            public_repo=$(jq -r '.public_repo' "$issue_file")
-
-            if [ "$priv_ver" = "$pub_ver" ] || [ "$age_days" -ne 95 ]; then
-              continue
-            fi
-
-            safe_branch=$(echo "$priv_ver" | sed 's/[^a-zA-Z0-9]/_/g' | tr '[:upper:]' '[:lower:]')
-            branch_name="promote_benchmark_$safe_branch"
-            pr_url=$(gh pr list --repo "$public_repo" --head "$branch_name" --json url -q '.[0].url' || echo "")
-
-            if [ -z "$pr_url" ]; then
-              echo "No PR found for $branch_name in $public_repo. Skipping Discord notification."
-              continue
-            fi
-
-          curl -X POST "$DISCORD_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d @- <<EOF
-          {
-            "embeds": [{
-              "title": "📦 Benchmark Promotion PR Created: Promote $priv_ver To $public_repo ($branch_name)",
-              "color": 16753920,
-              "fields": [
-                { "name": " ", "value": " " },
-                { "name": " ", "value": " " },
-                { "name": "🔒 Subscriber Repo:", "value": "$repo", "inline": false },
-                { "name": "📦 Subscriber Version:", "value": "$priv_ver", "inline": true },
-                { "name": " ", "value": " " },
-                { "name": "🌐 Community Repo:", "value": "$public_repo", "inline": false },
-                {
-                  "name": "🌿 Community Branch:",
-                  "value": "[${branch_name}](https://github.com/${public_repo}/tree/${branch_name}) (base: devel)",
-                  "inline": true
-                },
-                { "name": " ", "value": " " },
-                { "name": "📅 Days Tracked:", "value": "$age_days", "inline": false },
-                { "name": "🔗 Pull Request:", "value": "$pr_url", "inline": false }
-              ],
-              "footer": {
-                "text": "Lockdown GitHub Benchmark Tracker"
-              }
-            }]
-          }
-          EOF
           done
 
       - name: Remove workspace clones
