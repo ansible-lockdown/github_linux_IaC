@@ -108,9 +108,11 @@ jobs:
           GH_TOKEN: ${{ secrets.BADGE_PUSH_TOKEN }}
         run: |
           echo "Reading README.md from the latest branch of ${{ inputs.repo_name }} to extract version..."
-          if ! readme=$(gh api -H "Accept: application/vnd.github.raw" "repos/${{ inputs.repo_name }}/contents/README.md?ref=latest" 2>/dev/null); then
-            echo "README.md not found in latest branch of ${{ inputs.repo_name }}"
-            version="Unknown"
+          readme_err="$RUNNER_TEMP/readme_error.txt"
+          if ! readme=$(gh api -H "Accept: application/vnd.github.raw" "repos/${{ inputs.repo_name }}/contents/README.md?ref=latest" 2>"$readme_err"); then
+            echo "Failed to read README.md from the latest branch of ${{ inputs.repo_name }}, so no tracking issue is opened:"
+            cat "$readme_err"
+            exit 1
           else
             version=$(printf '%s\n' "$readme" | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
             if [ -z "$version" ]; then

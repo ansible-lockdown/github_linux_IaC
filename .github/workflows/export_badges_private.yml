@@ -155,14 +155,19 @@ jobs:
 
           # Benchmark version badge
           echo "Reading README.md from the latest branch of ${{ inputs.repo_name }} to extract version..."
-          if ! readme=$(gh api -H "Accept: application/vnd.github.raw" "repos/${{ inputs.repo_name }}/contents/README.md?ref=latest" 2>/dev/null); then
-            version="Unknown"
-            echo "README.md not found"
-          else
+          readme_err="$RUNNER_TEMP/readme_error.txt"
+          if readme=$(gh api -H "Accept: application/vnd.github.raw" "repos/${{ inputs.repo_name }}/contents/README.md?ref=latest" 2>"$readme_err"); then
             version=$(printf '%s\n' "$readme" | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
             if [ -z "$version" ]; then
               version=$(printf '%s\n' "$readme" | grep -Eo 'Version [0-9]+, Rel [0-9]+' | head -n1)
             fi
+          elif grep -q 'HTTP 404' "$readme_err"; then
+            version="Unknown"
+            echo "README.md not found"
+          else
+            echo "Failed to read README.md from ${{ inputs.repo_name }}:"
+            cat "$readme_err"
+            exit 1
           fi
 
           if [ -z "$version" ]; then version="Unknown"; fi
