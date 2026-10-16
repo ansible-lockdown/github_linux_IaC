@@ -17,13 +17,33 @@ on:
 jobs:
   monitor-90day-promotions:
     name: Monitor & Auto-Promote Benchmarks
-    runs-on: ubuntu-latest
+    runs-on: ${{ startsWith(github.repository, 'ansible-lockdown/Private-') && 'self-hosted' || 'ubuntu-latest' }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       repo: ${{ inputs.repo_name }}
       TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
       BADGE_PUSH_TOKEN: ${{ secrets.BADGE_PUSH_TOKEN }}
     steps:
+      - name: Clean workspace
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+      - name: Install GitHub CLI and tools
+        run: |
+          missing=()
+          for tool in gh jq rsync; do
+            command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+          done
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "gh, jq and rsync are already installed."
+          elif command -v dnf >/dev/null 2>&1; then
+            if [[ " ${missing[*]} " == *" gh "* ]]; then
+              sudo curl -fsSL -o /etc/yum.repos.d/gh-cli.repo https://cli.github.com/packages/rpm/gh-cli.repo
+            fi
+            sudo dnf install -y "${missing[@]}"
+          else
+            sudo apt-get update && sudo apt-get install -y "${missing[@]}"
+          fi
+
       - name: Validate required secrets
         run: |
           if [ -z "${{ secrets.TEAMS_WEBHOOK_URL }}" ]; then
@@ -53,10 +73,6 @@ jobs:
       - name: Set PRIVATE_REPOS env
         run: |
           echo "PRIVATE_REPOS=${{ inputs.repo_name }}" >> $GITHUB_ENV
-
-      - name: Install GitHub CLI and tools
-        run: |
-          sudo apt-get update && sudo apt-get install -y gh jq rsync
 
       - name: Extract issue and version metadata
         run: |
@@ -270,7 +286,7 @@ jobs:
 
       - name: Install GitHub Projects CLI extension
         if: steps.check-issue-data.outputs.should_continue == 'true'
-        run: gh extension install github/gh-projects
+        run: gh extension list | grep -q 'gh-projects' || gh extension install github/gh-projects
 
       - name: Mark closed issues as Done in Benchmark-Tracking Project
         if: steps.check-issue-data.outputs.should_continue == 'true'
@@ -757,3 +773,6 @@ jobs:
           EOF
           done
 
+      - name: Remove workspace clones
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +

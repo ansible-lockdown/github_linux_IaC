@@ -1,27 +1,21 @@
 # .github/workflows/pages_deploy.yml
 # ----------------------------------------------------------
 # Publishes the FULL site (repo root) to GitHub Pages
-# on an ~70-minute cadence using plain cron.
+# whenever the self_hosted branch receives a push, which is
+# how badge exports land. Manual dispatch is kept.
 #
 # Important:
-# - GitHub cron uses UTC. The unavoidable "long gap" is placed
-#   at 03:10→05:00 UTC, which is ~11:10pm→1:00am in New York
-#   (during Daylight Saving Time).
 # - Uses a single deploy job; once started it will not be canceled.
+#   A burst of pushes collapses to one running deploy plus one pending.
 # - .nojekyll ensures JSON endpoints (e.g., /badges/*.json) work.
 # ----------------------------------------------------------
 
-name: Pages Deploy (~70m, long gap ~11pm–1am ET)
+name: Pages Deploy
 
 on:
-  schedule:
-    # UTC times (designed so the one long gap lands ~11pm–1am America/New_York)
-    - cron: "0 2,5,12,19 * * *"    # 02:00, 05:00, 12:00, 19:00 UTC
-    - cron: "10 3,6,13,20 * * *"   # 03:10, 06:10, 13:10, 20:10 UTC
-    - cron: "20 7,14,21 * * *"     # 07:20, 14:20, 21:20 UTC
-    - cron: "30 8,15,22 * * *"     # 08:30, 15:30, 22:30 UTC
-    - cron: "40 9,16,23 * * *"     # 09:40, 16:40, 23:40 UTC
-    - cron: "50 0,10,17 * * *"     # 00:50, 10:50, 17:50 UTC
+  push:
+    branches:
+      - self_hosted
   workflow_dispatch:
 
 permissions:

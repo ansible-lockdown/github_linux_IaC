@@ -19,10 +19,30 @@ on:
 jobs:
   init:
     name: Setup Benchmark Tracking
-    runs-on: ubuntu-latest
+    runs-on: ${{ startsWith(github.repository, 'ansible-lockdown/Private-') && 'self-hosted' || 'ubuntu-latest' }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Clean workspace
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+      - name: Install GitHub CLI and tools
+        run: |
+          missing=()
+          for tool in gh jq rsync; do
+            command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+          done
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "gh, jq and rsync are already installed."
+          elif command -v dnf >/dev/null 2>&1; then
+            if [[ " ${missing[*]} " == *" gh "* ]]; then
+              sudo curl -fsSL -o /etc/yum.repos.d/gh-cli.repo https://cli.github.com/packages/rpm/gh-cli.repo
+            fi
+            sudo dnf install -y "${missing[@]}"
+          else
+            sudo apt-get update && sudo apt-get install -y "${missing[@]}"
+          fi
+
       - name: Validate required secrets
         run: |
           if [ -z "${{ secrets.TEAMS_WEBHOOK_URL }}" ]; then
@@ -177,7 +197,7 @@ jobs:
 
       - name: Install GitHub Projects CLI extension
         if: steps.tracking-needed.outputs.needed == 'true' && steps.create-tracking.outputs.issue_created == 'true'
-        run: gh extension install github/gh-projects
+        run: gh extension list | grep -q 'gh-projects' || gh extension install github/gh-projects
 
       - name: Add issue to Benchmark-Tracking GitHub Project and set status/type/dates
         if: steps.tracking-needed.outputs.needed == 'true' && steps.create-tracking.outputs.issue_created == 'true'
@@ -480,3 +500,7 @@ jobs:
             }]
           }
           EOF
+
+      - name: Remove workspace clones
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +

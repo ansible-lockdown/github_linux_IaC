@@ -15,9 +15,29 @@ on:
 jobs:
   export:
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && startsWith(inputs.repo_name, 'ansible-lockdown/Private-')) || (github.event_name == 'push' && github.ref_name == 'latest')
-    runs-on: ubuntu-latest
+    runs-on: ${{ startsWith(github.repository, 'ansible-lockdown/Private-') && 'self-hosted' || 'ubuntu-latest' }}
 
     steps:
+      - name: Clean workspace
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+      - name: Install GitHub CLI and tools
+        run: |
+          missing=()
+          for tool in gh jq rsync; do
+            command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+          done
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "gh, jq and rsync are already installed."
+          elif command -v dnf >/dev/null 2>&1; then
+            if [[ " ${missing[*]} " == *" gh "* ]]; then
+              sudo curl -fsSL -o /etc/yum.repos.d/gh-cli.repo https://cli.github.com/packages/rpm/gh-cli.repo
+            fi
+            sudo dnf install -y "${missing[@]}"
+          else
+            sudo apt-get update && sudo apt-get install -y "${missing[@]}"
+          fi
+
       - name: Create output directory
         run: |
           repo_short=$(basename "${{ inputs.repo_name }}")
@@ -130,11 +150,10 @@ jobs:
 
       - name: Clone and prepare badge folder
         run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-
           echo "Cloning self_hosted branch of github_linux_IaC..."
           git clone --branch self_hosted https://x-access-token:${{ secrets.BADGE_PUSH_TOKEN }}@github.com/ansible-lockdown/github_linux_IaC.git target
+          git -C target config user.email "actions@github.com"
+          git -C target config user.name "GitHub Actions"
 
           repo_short=$(basename "${{ inputs.repo_name }}")
 
@@ -177,5 +196,19 @@ jobs:
           else
             echo "Changes detected – committing and pushing..."
             git commit -m "Update PRIVATE badges for $repo_short"
-            git push origin self_hosted
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin self_hosted && git push origin self_hosted; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              if [ "$attempt" -eq 5 ]; then
+                echo "Push to self_hosted failed after 5 attempts."
+                exit 1
+              fi
+              sleep $((attempt * 5))
+            done
           fi
+
+      - name: Remove workspace clones
+        if: always()
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
