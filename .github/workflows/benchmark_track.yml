@@ -26,22 +26,56 @@ jobs:
       - name: Clean workspace
         run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
-      - name: Install GitHub CLI and tools
+      - name: Install GitHub CLI and jq
         run: |
-          missing=()
-          for tool in gh jq rsync; do
-            command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
-          done
-          if [ "${#missing[@]}" -eq 0 ]; then
-            echo "gh, jq and rsync are already installed."
-          elif command -v dnf >/dev/null 2>&1; then
-            if [[ " ${missing[*]} " == *" gh "* ]]; then
-              sudo curl -fsSL -o /etc/yum.repos.d/gh-cli.repo https://cli.github.com/packages/rpm/gh-cli.repo
+          gh_ver=2.102.0
+          jq_ver=1.8.2
+          case "$(uname -m)" in
+            x86_64)
+              arch=amd64
+              gh_sha=bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386
+              jq_sha=b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f
+              ;;
+            aarch64|arm64)
+              arch=arm64
+              gh_sha=7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484
+              jq_sha=8b85c817833814ddca00a144c33705546355afccf0cf39b188f3cdb48b852309
+              ;;
+            *)
+              echo "Unsupported architecture: $(uname -m)"
+              exit 1
+              ;;
+          esac
+          cache="${RUNNER_TOOL_CACHE:-$RUNNER_TEMP}/lockdown-badge-tools"
+          bin="$RUNNER_TEMP/lockdown-bin"
+          mkdir -p "$cache" "$bin"
+          fetch() {
+            if [ ! -f "$cache/$2" ]; then
+              curl -fsSL -o "$cache/$2.part" "$1" && mv "$cache/$2.part" "$cache/$2"
             fi
-            sudo dnf install -y "${missing[@]}"
+            if [ "$(sha256sum "$cache/$2" | cut -d' ' -f1)" != "$3" ]; then
+              echo "Checksum mismatch for $2, removing it."
+              rm -f "$cache/$2"
+              exit 1
+            fi
+          }
+          if command -v gh >/dev/null 2>&1; then
+            echo "gh found at $(command -v gh)"
           else
-            sudo apt-get update && sudo apt-get install -y "${missing[@]}"
+            gh_pkg="gh_${gh_ver}_linux_${arch}"
+            fetch "https://github.com/cli/cli/releases/download/v${gh_ver}/${gh_pkg}.tar.gz" "${gh_pkg}.tar.gz" "$gh_sha"
+            tar -xzf "$cache/${gh_pkg}.tar.gz" -C "$RUNNER_TEMP" "${gh_pkg}/bin/gh"
+            install -m 0755 "$RUNNER_TEMP/${gh_pkg}/bin/gh" "$bin/gh"
+            echo "gh ${gh_ver} installed from the checksum-verified release"
           fi
+          if command -v jq >/dev/null 2>&1; then
+            echo "jq found at $(command -v jq)"
+          else
+            fetch "https://github.com/jqlang/jq/releases/download/jq-${jq_ver}/jq-linux-${arch}" "jq-${jq_ver}-linux-${arch}" "$jq_sha"
+            install -m 0755 "$cache/jq-${jq_ver}-linux-${arch}" "$bin/jq"
+            echo "jq ${jq_ver} installed from the checksum-verified release"
+          fi
+          echo "$bin" >> "$GITHUB_PATH"
 
       - name: Validate required secrets
         run: |
