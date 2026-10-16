@@ -157,6 +157,8 @@ resource "local_file" "inventory" {
         ubtu24cis_grub_user_passwd: "{{ grub_user_passwd }}"
         ubtu24stig_audit_log_filesystem: '/'
         ubtu24stig_sudoers_exclude_nopasswd_list: "{{ sudoers_exclude_nopasswd_list }}"
+        ubtu26cis_disruption_high: true
+        ubtu26cis_rule_5_2_4: false # sudo password
     EOF
   provisioner "local-exec" {
     command = "/opt/ansible_${var.ansible_version}_venv/bin/ansible-playbook -i hosts.yml /opt/local_playbooks/change_hostname.yml"
