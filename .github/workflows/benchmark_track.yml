@@ -195,17 +195,6 @@ jobs:
           due_date=$(date -u -d "+90 days" +"%Y-%m-%d")
           echo "due_date=$due_date" >> $GITHUB_OUTPUT
 
-      # - name: Install GitHub Projects CLI extension
-      #   run: gh extension install github/gh-projects
-
-      # - name: Add issue to Benchmark-Tracking project
-      #   if: steps.tracking-needed.outputs.needed == 'true'
-      #   run: |
-      #     gh projects item-add \
-      #       --owner ansible-lockdown \
-      #       --number 3 \
-      #       --content-id "${{ steps.create-issue.outputs.issue_id }}"
-
       - name: Create tracking issue in Subscriber repo
         id: create-tracking
         if: steps.tracking-needed.outputs.needed == 'true'
@@ -229,10 +218,6 @@ jobs:
             --label benchmark-90day
 
           echo "issue_created=true" >> $GITHUB_OUTPUT
-
-      - name: Install GitHub Projects CLI extension
-        if: steps.tracking-needed.outputs.needed == 'true' && steps.create-tracking.outputs.issue_created == 'true'
-        run: gh extension list | grep -q 'gh-projects' || gh extension install github/gh-projects
 
       - name: Add issue to Benchmark-Tracking GitHub Project and set status/type/dates
         if: steps.tracking-needed.outputs.needed == 'true' && steps.create-tracking.outputs.issue_created == 'true'
@@ -261,8 +246,7 @@ jobs:
           echo "Issue URL: $issue_url"
 
           #### Verify project exists and get PROJECT_ID ####
-          PROJECT_ID=$(gh projects list --org ansible-lockdown --format json \
-            | jq -r '.projects[] | select(.number==3) | .id')
+          PROJECT_ID=$(gh project view 3 --owner ansible-lockdown --format json --jq '.id')
 
           if [ -z "$PROJECT_ID" ]; then
             echo "Project number 3 not found in ansible-lockdown org. Exiting."
@@ -270,53 +254,30 @@ jobs:
           fi
           echo "Found Project ID: $PROJECT_ID"
 
-          #### Add issue to project ####
+          #### Add issue to project and take the item ID from the response ####
           echo "Adding issue #$issue_number to project 3..."
-          gh projects item-add 3 --org ansible-lockdown --url "$issue_url"
-
-          #### Retrieve project item ID after adding with retry ####
-          attempt=0
-          max_attempts=5
-          sleep_seconds=3
-
-          while [ $attempt -lt $max_attempts ]; do
-            output=$(gh projects item-list 3 --org ansible-lockdown --format json || echo "")
-
-            if [ -z "$output" ]; then
-              echo "Attempt $((attempt+1)): No output from gh projects item-list. Retrying..."
-            else
-              project_item_id=$(echo "$output" | jq -r --arg url "$issue_url" '.items[] | select(.content.url==$url) | .id')
-              if [ -n "$project_item_id" ]; then
-                echo "Found project item ID: $project_item_id"
-                break
-              else
-                echo "Attempt $((attempt+1)): Issue not yet in project items list. Retrying..."
-              fi
-            fi
-
-            attempt=$((attempt + 1))
-            sleep $sleep_seconds
-          done
+          project_item_id=$(gh project item-add 3 --owner ansible-lockdown --url "$issue_url" --format json --jq '.id')
 
           if [ -z "$project_item_id" ]; then
-            echo "Failed to retrieve project item ID for issue #$issue_number after $max_attempts attempts."
+            echo "Adding issue #$issue_number to project 3 returned no item ID."
             exit 1
           fi
+          echo "Found project item ID: $project_item_id"
 
           #### Function to set a select field value ####
           set_select_field() {
             local field_name="$1"
             local option_value="$2"
 
-            field_id=$(gh projects field-list 3 --org ansible-lockdown --format json \
+            field_id=$(gh project field-list 3 --owner ansible-lockdown --limit 100 --format json \
               | jq -r '.fields[] | select(.name=="'"$field_name"'") | .id')
 
-            option_id=$(gh projects field-list 3 --org ansible-lockdown --format json \
+            option_id=$(gh project field-list 3 --owner ansible-lockdown --limit 100 --format json \
               | jq -r '.fields[] | select(.name=="'"$field_name"'") | .options[] | select(.name=="'"$option_value"'") | .id')
 
             if [ -n "$field_id" ] && [ -n "$option_id" ]; then
               echo "Setting $field_name to $option_value..."
-              gh projects item-edit --id "$project_item_id" --project-id "$PROJECT_ID" \
+              gh project item-edit --id "$project_item_id" --project-id "$PROJECT_ID" \
                 --field-id "$field_id" --single-select-option-id "$option_id"
             else
               echo "$field_name field or option '$option_value' not found."
@@ -342,12 +303,12 @@ jobs:
             fname="${field%%:*}"
             fvalue="${field##*:}"
 
-            fid=$(gh projects field-list 3 --org ansible-lockdown --format json \
+            fid=$(gh project field-list 3 --owner ansible-lockdown --limit 100 --format json \
               | jq -r '.fields[] | select(.name=="'"$fname"'") | .id')
 
             if [ -n "$fid" ]; then
               echo "Setting $fname to $fvalue..."
-              gh projects item-edit --id "$project_item_id" --project-id "$PROJECT_ID" \
+              gh project item-edit --id "$project_item_id" --project-id "$PROJECT_ID" \
                 --field-id "$fid" --date "$fvalue"
             else
               echo "Field $fname not found."

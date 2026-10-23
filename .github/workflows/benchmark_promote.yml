@@ -317,10 +317,6 @@ jobs:
             fi
           done
 
-      - name: Install GitHub Projects CLI extension
-        if: steps.check-issue-data.outputs.should_continue == 'true'
-        run: gh extension list | grep -q 'gh-projects' || gh extension install github/gh-projects
-
       - name: Mark closed issues as Done in Benchmark-Tracking Project
         if: steps.check-issue-data.outputs.should_continue == 'true'
         env:
@@ -329,8 +325,7 @@ jobs:
           set -euo pipefail
 
           # Get PROJECT_ID for project number 3
-          PROJECT_ID=$(gh projects list --org ansible-lockdown --format json \
-            | jq -r '.projects[] | select(.number==3) | .id')
+          PROJECT_ID=$(gh project view 3 --owner ansible-lockdown --format json --jq '.id')
 
           if [ -z "$PROJECT_ID" ]; then
             echo "Project number 3 not found in ansible-lockdown org. Exiting."
@@ -350,47 +345,28 @@ jobs:
               continue
             fi
 
-            # Get issue URL
-            issue_url="https://github.com/$repo/issues/$number"
-
-            # Fetch project item ID with retry
-            attempt=0
-            max_attempts=5
-            sleep_seconds=3
-            project_item_id=""
-
-            while [ $attempt -lt $max_attempts ]; do
-              output=$(gh projects item-list 3 --org ansible-lockdown --format json || echo "")
-              if [ -z "$output" ]; then
-                echo "Attempt $((attempt+1)): No output from gh projects item-list. Retrying..."
-              else
-                project_item_id=$(echo "$output" | jq -r --arg url "$issue_url" '.items[] | select(.content.url==$url) | .id')
-                if [ -n "$project_item_id" ]; then
-                  echo "Found project item ID: $project_item_id"
-                  break
-                else
-                  echo "Attempt $((attempt+1)): Issue not yet in project items list. Retrying..."
-                fi
-              fi
-              attempt=$((attempt + 1))
-              sleep $sleep_seconds
-            done
+            # Fetch the issue's item ID in project 3 from the issue itself
+            project_item_id=$(gh api graphql \
+              -f query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { issue(number: $number) { projectItems(first: 20) { nodes { id project { id } } } } } }' \
+              -f owner="${repo%%/*}" -f name="${repo##*/}" -F number="$number" \
+              --jq '.data.repository.issue.projectItems.nodes[] | select(.project.id == "'"$PROJECT_ID"'") | .id') || project_item_id=""
 
             if [ -z "$project_item_id" ]; then
-              echo "Failed to find project item ID for issue #$number after $max_attempts attempts."
+              echo "Issue #$number in $repo is not in project 3."
               continue
             fi
+            echo "Found project item ID: $project_item_id"
 
             # Fetch Status field ID and Done option ID
-            status_field_id=$(gh projects field-list 3 --org ansible-lockdown --format json \
+            status_field_id=$(gh project field-list 3 --owner ansible-lockdown --limit 100 --format json \
               | jq -r '.fields[] | select(.name=="Status") | .id')
 
-            done_option_id=$(gh projects field-list 3 --org ansible-lockdown --format json \
+            done_option_id=$(gh project field-list 3 --owner ansible-lockdown --limit 100 --format json \
               | jq -r '.fields[] | select(.name=="Status") | .options[] | select(.name=="Done") | .id')
 
             if [ -n "$status_field_id" ] && [ -n "$done_option_id" ]; then
               echo "Marking issue #$number as Done in project..."
-              gh projects item-edit --id "$project_item_id" --project-id "$PROJECT_ID" \
+              gh project item-edit --id "$project_item_id" --project-id "$PROJECT_ID" \
                 --field-id "$status_field_id" --single-select-option-id "$done_option_id"
             else
               echo "Status field or Done option not found."
