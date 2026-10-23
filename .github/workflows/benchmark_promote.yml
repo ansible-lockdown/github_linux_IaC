@@ -8,7 +8,7 @@ on:
         type: string
     secrets:
       TEAMS_WEBHOOK_URL:
-        required: true
+        required: false
       BADGE_PUSH_TOKEN:
         required: true
       DISCORD_WEBHOOK_URL:
@@ -21,7 +21,6 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       repo: ${{ inputs.repo_name }}
-      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
       BADGE_PUSH_TOKEN: ${{ secrets.BADGE_PUSH_TOKEN }}
     steps:
       - name: Clean workspace
@@ -83,10 +82,6 @@ jobs:
 
       - name: Validate required secrets
         run: |
-          if [ -z "${{ secrets.TEAMS_WEBHOOK_URL }}" ]; then
-            echo "TEAMS_WEBHOOK_URL is not set."
-            exit 1
-          fi
           if [ -z "${{ secrets.BADGE_PUSH_TOKEN }}" ]; then
             echo "BADGE_PUSH_TOKEN is not set."
             exit 1
@@ -203,7 +198,7 @@ jobs:
             echo "⚠️ No benchmark issues found to track."
           fi
 
-      - name: Close already promoted issues and notify Teams
+      - name: Close already promoted issues
         if: steps.check-issue-data.outputs.should_continue == 'true'
         run: |
           for issue_file in issue_data/*.json; do
@@ -216,59 +211,6 @@ jobs:
             if [ "$priv_ver" = "$pub_ver" ]; then
               echo "[INFO] Benchmark version $priv_ver already promoted. Closing issue #$number in $repo."
               gh issue close "$number" -R "$repo" --comment "Benchmark version $priv_ver has been promoted to public. Closing tracker."
-
-          cat <<EOF | curl -X POST "$TEAMS_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d @-
-          {
-            "attachments": [
-              {
-                "contentType": "application/vnd.microsoft.card.adaptive",
-                "content": {
-                  "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                  "type": "AdaptiveCard",
-                  "version": "1.4",
-                  "body": [
-                    {
-                      "type": "TextBlock",
-                      "size": "Large",
-                      "weight": "Bolder",
-                      "color": "Good",
-                      "text": "✅ Benchmark Already Promoted"
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "Benchmark version ${priv_ver} from **${repo}** is already available in **${public_repo}**.",
-                      "wrap": true,
-                      "spacing": "Medium"
-                    },
-                    {
-                      "type": "FactSet",
-                      "facts": [
-                        { "title": "🔒 Subscriber Repo:", "value": "${repo}" },
-                        { "title": "📦 Subscriber Version:", "value": "${priv_ver}" },
-                        { "title": "🌐 Community Repo:", "value": "${public_repo}" },
-                        { "title": "📦 Community Version:", "value": "${pub_ver}" }
-                      ]
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "🔗 [View Issue #${number}](https://github.com/${repo}/issues/${number})",
-                      "wrap": true,
-                      "spacing": "Medium"
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "📅 Auto-closed on: $(date -u +%Y-%m-%dT%H:%M:%SZ)",
-                      "wrap": true,
-                      "spacing": "Small"
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-          EOF
             fi
           done
 
@@ -317,10 +259,6 @@ jobs:
             fi
           done
 
-      - name: Install GitHub Projects CLI extension
-        if: steps.check-issue-data.outputs.should_continue == 'true'
-        run: gh extension list | grep -q 'gh-projects' || gh extension install github/gh-projects
-
       - name: Mark closed issues as Done in Benchmark-Tracking Project
         if: steps.check-issue-data.outputs.should_continue == 'true'
         env:
@@ -329,8 +267,7 @@ jobs:
           set -euo pipefail
 
           # Get PROJECT_ID for project number 3
-          PROJECT_ID=$(gh projects list --org ansible-lockdown --format json \
-            | jq -r '.projects[] | select(.number==3) | .id')
+          PROJECT_ID=$(gh project view 3 --owner ansible-lockdown --format json --jq '.id')
 
           if [ -z "$PROJECT_ID" ]; then
             echo "Project number 3 not found in ansible-lockdown org. Exiting."
@@ -350,47 +287,28 @@ jobs:
               continue
             fi
 
-            # Get issue URL
-            issue_url="https://github.com/$repo/issues/$number"
-
-            # Fetch project item ID with retry
-            attempt=0
-            max_attempts=5
-            sleep_seconds=3
-            project_item_id=""
-
-            while [ $attempt -lt $max_attempts ]; do
-              output=$(gh projects item-list 3 --org ansible-lockdown --format json || echo "")
-              if [ -z "$output" ]; then
-                echo "Attempt $((attempt+1)): No output from gh projects item-list. Retrying..."
-              else
-                project_item_id=$(echo "$output" | jq -r --arg url "$issue_url" '.items[] | select(.content.url==$url) | .id')
-                if [ -n "$project_item_id" ]; then
-                  echo "Found project item ID: $project_item_id"
-                  break
-                else
-                  echo "Attempt $((attempt+1)): Issue not yet in project items list. Retrying..."
-                fi
-              fi
-              attempt=$((attempt + 1))
-              sleep $sleep_seconds
-            done
+            # Fetch the issue's item ID in project 3 from the issue itself
+            project_item_id=$(gh api graphql \
+              -f query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { issue(number: $number) { projectItems(first: 20) { nodes { id project { id } } } } } }' \
+              -f owner="${repo%%/*}" -f name="${repo##*/}" -F number="$number" \
+              --jq '.data.repository.issue.projectItems.nodes[] | select(.project.id == "'"$PROJECT_ID"'") | .id') || project_item_id=""
 
             if [ -z "$project_item_id" ]; then
-              echo "Failed to find project item ID for issue #$number after $max_attempts attempts."
+              echo "Issue #$number in $repo is not in project 3."
               continue
             fi
+            echo "Found project item ID: $project_item_id"
 
             # Fetch Status field ID and Done option ID
-            status_field_id=$(gh projects field-list 3 --org ansible-lockdown --format json \
+            status_field_id=$(gh project field-list 3 --owner ansible-lockdown --limit 100 --format json \
               | jq -r '.fields[] | select(.name=="Status") | .id')
 
-            done_option_id=$(gh projects field-list 3 --org ansible-lockdown --format json \
+            done_option_id=$(gh project field-list 3 --owner ansible-lockdown --limit 100 --format json \
               | jq -r '.fields[] | select(.name=="Status") | .options[] | select(.name=="Done") | .id')
 
             if [ -n "$status_field_id" ] && [ -n "$done_option_id" ]; then
               echo "Marking issue #$number as Done in project..."
-              gh projects item-edit --id "$project_item_id" --project-id "$PROJECT_ID" \
+              gh project item-edit --id "$project_item_id" --project-id "$PROJECT_ID" \
                 --field-id "$status_field_id" --single-select-option-id "$done_option_id"
             else
               echo "Status field or Done option not found."
@@ -465,8 +383,10 @@ jobs:
           EOF
           done
 
-      - name: Send reminder messages for promotion windows (days 85-94, then weekly from day 95)
-        if: steps.check-issue-data.outputs.should_continue == 'true'
+      - name: Send Discord promotion reminders (days 85-94 except 90, then weekly from day 95)
+        if: steps.check-issue-data.outputs.should_continue == 'true' && env.DISCORD_WEBHOOK_URL != ''
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           for issue_file in issue_data/*.json; do
             repo=$(jq -r '.repo' "$issue_file")
@@ -480,11 +400,12 @@ jobs:
               continue
             fi
 
+            if [ "$age_days" -eq 90 ]; then
+              continue
+            fi
+
             if { [ "$age_days" -ge 85 ] && [ "$age_days" -lt 95 ]; } || { [ "$age_days" -ge 95 ] && [ $(( (age_days - 95) % 7 )) -eq 0 ]; }; then
-              if [ "$age_days" -eq 90 ]; then
-                reminder_msg="🚨 **Benchmark $priv_ver** from \`$repo\` is due for community release **today** (Day 90)."
-                urgency_note="📢 Please review and promote if everything is ready."
-              elif [ "$age_days" -lt 90 ]; then
+              if [ "$age_days" -lt 90 ]; then
                 days_left=$((90 - age_days))
                 reminder_msg="⏳ **Benchmark $priv_ver** from \`$repo\` is scheduled for community release in **$days_left day(s)** (target: Day 90)."
                 urgency_note="📝 Please prepare and review the benchmark."
@@ -495,65 +416,39 @@ jobs:
               fi
 
               issue_url="https://github.com/${repo}/issues/${number}"
-              echo "Sending Teams reminder for issue #$number"
+              echo "Sending Discord reminder for issue #$number"
 
-          cat <<EOF | curl -X POST "$TEAMS_WEBHOOK_URL" \
+          curl -X POST "$DISCORD_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -d @-
+            -d @- <<EOF
           {
-            "attachments": [
-              {
-                "contentType": "application/vnd.microsoft.card.adaptive",
-                "content": {
-                  "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                  "type": "AdaptiveCard",
-                  "version": "1.4",
-                  "body": [
-                    {
-                      "type": "TextBlock",
-                      "size": "Large",
-                      "weight": "Bolder",
-                      "color": "Attention",
-                      "text": "⏰ Benchmark Promotion Reminder"
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "${reminder_msg}",
-                      "wrap": true,
-                      "spacing": "Medium"
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "${urgency_note}",
-                      "wrap": true,
-                      "spacing": "Small"
-                    },
-                    {
-                      "type": "FactSet",
-                      "facts": [
-                        { "title": "🔒 Subscriber Repo:", "value": "${repo}" },
-                        { "title": "📦 Subscriber Version:", "value": "${priv_ver}" },
-                        { "title": "🌐 Destination Community Repo:", "value": "${public_repo}" },
-                        { "title": "📅 Days Tracked:", "value": "${age_days}" }
-                      ]
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "🔗 [View Issue #${number}](${issue_url})",
-                      "wrap": true,
-                      "spacing": "Medium"
-                    }
-                  ]
-                }
+            "embeds": [{
+              "title": "⏰ Benchmark Promotion Reminder",
+              "color": 15105570,
+              "fields": [
+                { "name": "📢 Promotion Status", "value": "${reminder_msg}", "inline": false },
+                { "name": "⚠️ Promotion Notice", "value": "${urgency_note}", "inline": false },
+                { "name": " ", "value": " " },
+                { "name": "🔒 Subscriber Repo", "value": "${repo}", "inline": false },
+                { "name": "📦 Subscriber Version", "value": "${priv_ver}", "inline": true },
+                { "name": " ", "value": " " },
+                { "name": "🌐 Target Community Repo", "value": "${public_repo}", "inline": false },
+                { "name": "⏱️ Days Tracked", "value": "${age_days}", "inline": true },
+                { "name": "🔗 Issue Tracker", "value": "[View Issue #${number}](${issue_url})", "inline": false }
+              ],
+              "footer": {
+                "text": "Lockdown GitHub Benchmark Tracker"
               }
-            ]
+            }]
           }
           EOF
             fi
           done
 
-      - name: Send Teams alert for missing public repo or branch (Days 85-90)
-        if: steps.check-issue-data.outputs.should_continue == 'true'
+      - name: Send Discord alert for missing public repo or branch (Days 85-90)
+        if: steps.check-issue-data.outputs.should_continue == 'true' && env.DISCORD_WEBHOOK_URL != ''
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           for issue_file in issue_data/*.json; do
             REPO=$(jq -r '.repo' "$issue_file")
@@ -577,49 +472,24 @@ jobs:
               fi
 
               if [ -n "$missing_reason" ]; then
-          cat <<EOF | curl -X POST "$TEAMS_WEBHOOK_URL" \
+          curl -X POST "$DISCORD_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -d @-
+            -d @- <<EOF
           {
-            "attachments": [
-              {
-                "contentType": "application/vnd.microsoft.card.adaptive",
-                "content": {
-                  "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                  "type": "AdaptiveCard",
-                  "version": "1.4",
-                  "body": [
-                    {
-                      "type": "TextBlock",
-                      "size": "Large",
-                      "weight": "Bolder",
-                      "color": "Attention",
-                      "text": "❌ Benchmark Promotion Will Be Blocked"
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "$missing_reason",
-                      "wrap": true,
-                      "spacing": "Medium"
-                    },
-                    {
-                      "type": "FactSet",
-                      "facts": [
-                        { "title": "🔒 Subscriber Repo", "value": "${REPO}" },
-                        { "title": "📦 Subscriber Version", "value": "${PRIVATE_VERSION}" },
-                        { "title": "🌐 Community Repo", "value": "$public_repo" }
-                      ]
-                    },
-                    {
-                      "type": "TextBlock",
-                      "text": "📢 Please resolve this to enable promotion.",
-                      "wrap": true,
-                      "spacing": "Medium"
-                    }
-                  ]
-                }
+            "embeds": [{
+              "title": "❌ Benchmark Promotion Will Be Blocked",
+              "color": 15158332,
+              "description": "$missing_reason",
+              "fields": [
+                { "name": "🔒 Subscriber Repo", "value": "${REPO}", "inline": false },
+                { "name": "📦 Subscriber Version", "value": "${PRIVATE_VERSION}", "inline": true },
+                { "name": "🌐 Community Repo", "value": "$public_repo", "inline": false },
+                { "name": "📢 Action", "value": "Please resolve this to enable promotion.", "inline": false }
+              ],
+              "footer": {
+                "text": "Lockdown GitHub Benchmark Tracker"
               }
-            ]
+            }]
           }
           EOF
             fi
