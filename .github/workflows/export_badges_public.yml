@@ -160,7 +160,7 @@ jobs:
 
           echo "Syncing badge files with rsync (only changed files copied)..."
           if [ -d "output/badges/$repo_short" ]; then
-            rsync -a --delete --checksum --itemize-changes output/badges/$repo_short/ target/badges/$repo_short/ | tee sync_log.txt
+            rsync -a --delete --filter='P pre-commit-ci.json' --checksum --itemize-changes output/badges/$repo_short/ target/badges/$repo_short/ | tee sync_log.txt 
           else
             echo "Warning: No badge output found in output/badges/$repo_short"
           fi
