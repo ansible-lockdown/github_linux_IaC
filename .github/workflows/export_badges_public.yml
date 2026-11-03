@@ -193,5 +193,15 @@ jobs:
           else
             echo "Changes detected – committing and pushing to self_hosted..."
             git commit -m "Update PUBLIC badges for $repo_short"
-            git push origin self_hosted
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin self_hosted && git push origin self_hosted; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              if [ "$attempt" -eq 5 ]; then
+                echo "Push to self_hosted failed after 5 attempts."
+                exit 1
+              fi
+              sleep $((attempt * 5))
+            done
           fi
