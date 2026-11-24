@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout site (self_hosted)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           ref: self_hosted
 
@@ -45,9 +45,9 @@ jobs:
         run: touch .nojekyll
 
       - name: Upload Pages artifact (root)
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: .
 
       - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5.0.1
