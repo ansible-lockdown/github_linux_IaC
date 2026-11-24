@@ -73,6 +73,7 @@ resource "local_file" "inventory" {
         rhel8cis_set_boot_pass: true
         rhel8cis_disruption_high: true
         rhel8cis_allow_authselect_updates: true
+        rhel8cis_sudoers_exclude_nopasswd_list: "{{ sudoers_exclude_nopasswd_list }}"
         rhel8stig_disruption_high: true
         rhel8stig_sudoers_exclude_nopasswd_list: "{{ sudoers_exclude_nopasswd_list }}"
         rhel9cis_sudoers_exclude_nopasswd_list: "{{ sudoers_exclude_nopasswd_list }}"
